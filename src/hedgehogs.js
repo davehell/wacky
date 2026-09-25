@@ -470,4 +470,3 @@ function resetHedgehogs() {
 }
 
 export { MAX_HOGS, spots as hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs };
-window.__dbg = { setAct, spots, ACTS }; // DBG

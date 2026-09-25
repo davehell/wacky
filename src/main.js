@@ -665,4 +665,3 @@ resize();
 camera.position.set(player.x + 10, 5, player.z + 10);
 requestAnimationFrame(loop);
 
-window.__main = { camera, karts, get player() { return player; }, get state() { return state; }, frameUpdate }; // DBG
