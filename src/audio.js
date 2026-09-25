@@ -1,0 +1,153 @@
+import { $, clamp, store } from './util.js';
+import { W } from './track.js';
+
+/* ================= Audio ================= */
+let AC = null, master = null, sfxBus = null, noiseBuf = null, pulse = null, eng = null, muted = store.get('dk-muted') === '1';
+const opp = [];
+const GEARS = [0, 9, 17, 25, 33, 52];
+function initAudio() {
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    const comp = AC.createDynamicsCompressor();
+    comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 4;
+    master = AC.createGain(); master.gain.value = muted ? 0 : 0.8;
+    master.connect(comp).connect(AC.destination);
+    sfxBus = AC.createGain(); sfxBus.gain.value = 0.9; sfxBus.connect(master);
+    noiseBuf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    // Pulse wave with a 30 % duty cycle: the nasal buzz of a small single-cylinder engine
+    const H = 32, re = new Float32Array(H), im = new Float32Array(H);
+    for (let n = 1; n < H; n++) im[n] = (Math.sin(n * Math.PI * 0.3) / n) * Math.exp(-n / 14);
+    pulse = AC.createPeriodicWave(re, im);
+
+    const voice = (lpFreq) => {
+      const osc = AC.createOscillator(); osc.setPeriodicWave(pulse);
+      const hp = AC.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 150;
+      const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = lpFreq; lp.Q.value = 0.8;
+      const gain = AC.createGain(); gain.gain.value = 0;
+      osc.connect(hp).connect(lp).connect(gain);
+      osc.start();
+      return { osc, lp, gain };
+    };
+    const loopNoise = (type, f, q) => {
+      const s = AC.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+      const fl = AC.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+      const g = AC.createGain(); g.gain.value = 0;
+      s.connect(fl).connect(g).connect(master); s.start();
+      return { f: fl, g };
+    };
+    const v = voice(1200);
+    const peak = AC.createBiquadFilter(); peak.type = 'peaking'; peak.frequency.value = 900; peak.gain.value = 4; peak.Q.value = 1;
+    v.gain.connect(peak).connect(master);
+    eng = Object.assign(v, { w: 0, gear: 1, shiftT: 0, skid: loopNoise('bandpass', 1500, 3), rumble: loopNoise('lowpass', 420, 0.7), wind: loopNoise('highpass', 900, 0.5) });
+
+    for (let i = 0; i < 5; i++) {
+      const o = voice(1400);
+      const pan = AC.createStereoPanner ? AC.createStereoPanner() : null;
+      if (pan) o.gain.connect(pan).connect(master); else o.gain.connect(master);
+      opp.push(Object.assign(o, { pan, pitch: 0.85 + i * 0.09 }));
+    }
+  } catch (e) { AC = null; eng = null; }
+}
+function note(freq, at, dur, type = 'sine', vol = 0.1, endFreq = 0) {
+  if (!AC) return;
+  const t = AC.currentTime + at, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(sfxBus); o.start(t); o.stop(t + dur + 0.05);
+}
+function whoosh(at, dur, type, f0, f1, vol, q = 1) {
+  if (!AC) return;
+  const t = AC.currentTime + at, s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = noiseBuf; f.type = type; f.Q.value = q;
+  f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + dur * 0.2);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f).connect(g).connect(sfxBus); s.start(t); s.stop(t + dur + 0.05);
+}
+const sfx = {
+  pickup: () => { note(1047, 0, 0.16, 'triangle', 0.07); note(1319, 0.06, 0.16, 'triangle', 0.07); note(1568, 0.12, 0.22, 'triangle', 0.07); },
+  hit: () => { note(300, 0, 0.3, 'sine', 0.25, 90); whoosh(0, 0.3, 'bandpass', 1600, 300, 0.25, 1.2); note(880, 0.05, 0.12, 'triangle', 0.05, 440); },
+  boost: () => { whoosh(0, 0.5, 'bandpass', 500, 3000, 0.3, 1.4); note(330, 0, 0.35, 'triangle', 0.06, 660); },
+  throw: () => whoosh(0, 0.22, 'bandpass', 2200, 600, 0.18, 2),
+  beep: () => { note(587, 0, 0.3, 'sine', 0.16); note(1174, 0, 0.2, 'sine', 0.035); },
+  go: () => { note(1175, 0, 0.6, 'sine', 0.13); note(1568, 0, 0.6, 'sine', 0.08); note(2350, 0, 0.3, 'sine', 0.02); },
+  finish: () => { [784, 988, 1175, 1568].forEach((f, i) => note(f, i * 0.12, i === 3 ? 0.7 : 0.18, 'triangle', 0.09)); },
+  shift: () => whoosh(0, 0.09, 'bandpass', 2500, 1200, 0.05, 2),
+};
+function gearOf(v) { let g = 1; while (g < GEARS.length - 1 && v >= GEARS[g]) g++; return g; }
+function revOf(v, g) { const lo = GEARS[g - 1], hi = GEARS[g]; return clamp(0.25 + 0.75 * ((v - lo) / (hi - lo)), 0.2, 1); }
+
+// rev: optional override (0..1) used while waiting on the grid
+function setEngine(k, throttle, dt, rev = null) {
+  if (!eng) return;
+  const t = AC.currentTime, v = Math.abs(k.speed), off = Math.abs(k.lat) > W + 1.2;
+  let r;
+  if (rev !== null) r = rev;
+  else {
+    const g = gearOf(v);
+    if (g !== eng.gear) { if (g > eng.gear) { eng.shiftT = 0.14; sfx.shift(); } eng.gear = g; }
+    r = revOf(v, g);
+    if (k.drifting) r += 0.1;
+    if (k.boost > 0) r += 0.14;
+    if (k.y > 0.05) r += 0.12;
+    if (!throttle) r *= 0.82;
+    r -= Math.abs(k.st) * 0.05;
+  }
+  eng.shiftT = Math.max(0, eng.shiftT - dt);
+  eng.w += (Math.random() - 0.5) * dt * 0.5;
+  eng.w *= 1 - dt * 0.6;
+  eng.w = clamp(eng.w, -0.04, 0.04);
+  const bump = off && v > 5 ? (Math.random() - 0.5) * 0.1 : 0;
+  const f = (78 + r * 170) * (1 + eng.w + bump) * (eng.shiftT > 0 ? 0.9 : 1);
+  eng.osc.frequency.setTargetAtTime(f, t, 0.035);
+  eng.lp.frequency.setTargetAtTime(700 + r * 1800 + (throttle ? 700 : 0), t, 0.08);
+  const vol = eng.shiftT > 0 ? 0.03 : (throttle ? 0.07 : 0.045) + r * 0.02;
+  eng.gain.gain.setTargetAtTime(vol, t, 0.05);
+  eng.skid.g.gain.setTargetAtTime(k.drifting ? 0.04 : 0, t, 0.05);
+  eng.skid.f.frequency.setTargetAtTime(1300 + v * 12 + Math.sin(t * 9) * 150, t, 0.05);
+  eng.rumble.g.gain.setTargetAtTime(off ? clamp(v / 20, 0, 1) * 0.12 : 0, t, 0.08);
+  eng.wind.g.gain.setTargetAtTime(Math.pow(clamp(v / 45, 0, 1.4), 2) * 0.035 * (1 + Math.sin(t * 0.7) * 0.4), t, 0.2);
+}
+// heading: camera yaw, used to pan opponents left or right
+function updateOpponents(listener, others, heading) {
+  if (!eng) return;
+  const t = AC.currentTime;
+  const rx = Math.cos(heading), rz = -Math.sin(heading);
+  others.forEach((k, i) => {
+    const o = opp[i];
+    if (!o) return;
+    const dx = k.x - listener.x, dz = k.z - listener.z, d = Math.hypot(dx, dz) || 1;
+    const vr = ((k.vx - listener.vx) * dx + (k.vz - listener.vz) * dz) / d;
+    const doppler = clamp(1 - vr / 70, 0.75, 1.3);
+    const v = Math.abs(k.speed);
+    const f = (78 + revOf(v, gearOf(v)) * 170) * o.pitch * doppler;
+    o.osc.frequency.setTargetAtTime(f, t, 0.05);
+    o.gain.gain.setTargetAtTime(0.06 * Math.pow(clamp(1 - d / 50, 0, 1), 2), t, 0.08);
+    if (o.pan) o.pan.pan.setTargetAtTime(clamp(-(dx * rx + dz * rz) / 12, -0.9, 0.9), t, 0.08);
+  });
+}
+function silenceEngine() {
+  if (!eng) return;
+  const t = AC.currentTime;
+  for (const n of [eng.gain, eng.skid.g, eng.rumble.g, eng.wind.g, ...opp.map((o) => o.gain)]) n.gain.setTargetAtTime(0, t, 0.05);
+}
+function drawMuteIcon() {
+  $('#muteIcon').innerHTML = '<path d="M3 7h3l5-4v14l-5-4H3z" fill="currentColor"/>' +
+    (muted ? '<path d="m13 7 5 6m0-6-5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' : '<path d="M14 6.5a5 5 0 0 1 0 7M16.5 4a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>');
+}
+function toggleMute() {
+  muted = !muted;
+  store.set('dk-muted', muted ? '1' : '0');
+  if (master) master.gain.setTargetAtTime(muted ? 0 : 0.8, AC.currentTime, 0.02);
+  drawMuteIcon();
+}
+drawMuteIcon();
+
+export { initAudio, sfx, setEngine, updateOpponents, silenceEngine, toggleMute };

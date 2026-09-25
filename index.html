@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Divoká kola</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Figtree:wght@400;600;800&display=swap">
+<link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="hud" id="hud" hidden>
+  <div class="hud__tl">
+    <div class="pos outline"><span id="pos">6.</span><small id="posOf">/6</small></div>
+    <div class="chip"><div><span>Kolo</span><b id="lap">1/3</b></div><div><span>Čas</span><b id="time">0:00.00</b></div></div>
+  </div>
+  <div class="hud__tr">
+    <div>
+      <div class="slot" id="slot"></div>
+      <div class="slot-label" id="slotLabel">Prázdné</div>
+    </div>
+    <div class="icon-btns">
+      <button class="icon-btn" id="pauseBtn" aria-label="Pauza"><svg viewBox="0 0 20 20"><rect x="4" y="3" width="4" height="14" rx="1.5" fill="currentColor"/><rect x="12" y="3" width="4" height="14" rx="1.5" fill="currentColor"/></svg></button>
+      <button class="icon-btn" id="muteBtn" aria-label="Zvuk"><svg viewBox="0 0 20 20" id="muteIcon"></svg></button>
+    </div>
+  </div>
+  <div class="hud__bl">
+    <div class="speed outline"><span id="speed">0</span><small>km/h</small></div>
+    <div class="drift-meter" aria-hidden="true"><i id="driftBar"></i></div>
+  </div>
+  <div class="hud__br"><canvas id="mini" aria-label="Mapa trati"></canvas></div>
+  <div class="msg outline" id="msg"></div>
+  <div class="cd outline" id="cd"></div>
+</div>
+
+<section class="overlay" id="menu">
+  <div class="panel">
+    <p class="eyebrow">Arkádové závody zvířat · Slunečný okruh</p>
+    <h1>Divoká kola</h1>
+    <p class="lede">Tři kola, šest jezdců. Driftuj v zatáčkách pro turbo, sbírej krabice s otazníkem a házej ježky po soupeřích.</p>
+    <h2>Jezdec</h2>
+    <div class="chars" id="chars" role="radiogroup" aria-label="Jezdec"></div>
+    <div class="stats" id="stats"></div>
+    <h2>Třída</h2>
+    <div class="seg" id="cc" role="radiogroup" aria-label="Třída">
+      <button role="radio" data-cc="0" aria-checked="false">50 cc</button>
+      <button role="radio" data-cc="1" aria-checked="true">100 cc</button>
+      <button role="radio" data-cc="2" aria-checked="false">150 cc</button>
+    </div>
+    <button class="big" id="startBtn">Na start</button>
+    <p class="best" id="best"></p>
+    <h2>Ovládání</h2>
+    <dl class="keys">
+      <dt><kbd>↑</kbd> <kbd>←</kbd> <kbd>→</kbd> <kbd>↓</kbd></dt><dd>plyn, řízení, brzda (nebo WASD)</dd>
+      <dt><kbd>Mezerník</kbd></dt><dd>drift: drž v zatáčce, puštěním získáš turbo</dd>
+      <dt><kbd>E</kbd></dt><dd>použít předmět</dd>
+      <dt><kbd>Esc</kbd> <kbd>M</kbd></dt><dd>pauza, zvuk</dd>
+      <dt>Gamepad</dt><dd>RT plyn, LT brzda, RB drift, X předmět</dd>
+    </dl>
+  </div>
+</section>
+
+<section class="overlay" id="pause" hidden>
+  <div class="panel panel--center" style="width:min(360px, calc(100% - 32px))">
+    <h1 style="font-size:44px">Pauza</h1>
+    <button class="big" id="resumeBtn">Pokračovat</button>
+    <div class="row"><button class="ghost" id="restartBtn">Od začátku</button><button class="ghost" id="quitBtn">Do menu</button></div>
+  </div>
+</section>
+
+<section class="overlay" id="results" hidden>
+  <div class="panel panel--center" style="width:min(460px, calc(100% - 32px))">
+    <p class="eyebrow" id="resEyebrow">Cíl</p>
+    <h1 id="resTitle" style="font-size:48px">1. místo</h1>
+    <table class="results"><tbody id="resBody"></tbody></table>
+    <p class="best" id="resBest"></p>
+    <div class="row"><button class="big" id="againBtn">Jet znovu</button><button class="ghost" id="menuBtn">Změnit jezdce</button></div>
+  </div>
+</section>
+
+<div class="touch" id="touch" hidden>
+  <div class="grp">
+    <button class="tbtn" data-t="left" aria-label="Doleva"><svg viewBox="0 0 30 30"><path d="M19 5 8 15l11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="tbtn" data-t="right" aria-label="Doprava"><svg viewBox="0 0 30 30"><path d="m11 5 11 10-11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  </div>
+  <div class="grp">
+    <button class="tbtn" data-t="brake">Brzda</button>
+    <button class="tbtn" data-t="item">Hoď</button>
+    <button class="tbtn" data-t="drift">Drift</button>
+  </div>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
