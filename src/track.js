@@ -3,7 +3,7 @@ import { col, rnd } from './util.js';
 import { scene, canvasTex, std, mesh } from './render.js';
 
 /* ================= Track ================= */
-const N = 900, W = 11, LIM = W + 15, LAPS = 3;
+const N = 900, W = 15, LIM = W + 13, LAPS = 3;
 const ctrl = [[0, 0], [150, 0], [230, 40], [252, 130], [200, 202], [110, 192], [62, 132], [0, 160], [-80, 222], [-172, 192], [-204, 100], [-152, 28], [-80, -10]]
   .map(([x, z]) => new THREE.Vector3(x * 1.35, 0, z * 1.35));
 const curve = new THREE.CatmullRomCurve3(ctrl, true, 'centripetal');

@@ -409,12 +409,13 @@ const nextAct = (sp) => (sp.act + 1 + Math.floor(Math.random() * (ACTS.length - 
 /* ---------- Placement ---------- */
 const spots = [];
 {
-  const COUNT = 22, avoid = [0.17, 0.46, 0.73].map((f) => Math.floor(N * f));
+  const COUNT = 11, avoid = [0.17, 0.46, 0.73].map((f) => Math.floor(N * f));
   const order = ACTS.map((_, n) => n).sort(() => Math.random() - 0.5);
   for (let n = 0; n < COUNT; n++) {
     let i = Math.floor(60 + (n * (N - 140)) / COUNT);
     if (avoid.some((a) => Math.abs(a - i) < 14)) i += 16;
-    const lat = ((n * 5) % 9 - 4) * (W - 2.6) / 4;
+    // spread across the road, but well away from its edges
+    const lat = ((n * 5) % 9 - 4) * (W * 0.55) / 4;
     const c = makeHedgehog();
     const x = P[i].x + S[i].x * lat, z = P[i].z + S[i].z * lat;
     c.root.position.set(x, 0, z);
@@ -469,3 +470,4 @@ function resetHedgehogs() {
 }
 
 export { MAX_HOGS, spots as hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs };
+window.__dbg = { setAct, spots, ACTS }; // DBG

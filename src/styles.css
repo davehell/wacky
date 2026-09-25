@@ -125,6 +125,10 @@ h2 { margin: 4px 0 -6px; font-size: 12px; font-weight: 800; letter-spacing: 0.12
 .bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--ink); border-radius: 99px; transition: width 0.25s; }
 .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: var(--line); padding: 5px; border-radius: 14px; }
+.seg--2 { grid-template-columns: repeat(2, 1fr); }
+.hint { margin: -4px 0 0; font-size: 13px; color: var(--ink-soft); }
+.block { display: flex; flex-direction: column; gap: 16px; }
+[hidden] { display: none !important; }
 .seg button {
   font: 800 14px var(--body); color: var(--ink); border: 0; background: transparent; border-radius: 10px; padding: 9px 0; cursor: pointer;
 }
@@ -160,8 +164,10 @@ kbd { font: 700 11px var(--body); background: #fff; border: 1px solid var(--line
   width: 74px; height: 74px; border-radius: 50%; border: 3px solid #fff; background: rgba(20, 33, 61, 0.45); color: #fff;
   font: 800 12px var(--body); letter-spacing: 0.06em; text-transform: uppercase; display: grid; place-items: center;
 }
-.touch .grp--col { flex-direction: column; gap: 10px; }
-.tbtn--sm { width: 58px; height: 58px; font-size: 11px; letter-spacing: 0.02em; }
+.tbtn--fire { font-size: 11px; letter-spacing: 0.02em; }
+body.is-kid .tbtn { width: 96px; height: 96px; }
+body.is-kid .tbtn--fire { font-size: 15px; background: rgba(239, 71, 111, 0.6); }
+body.is-kid .race-only, body:not(.is-kid) .kid-only { display: none; }
 .tbtn.on { background: rgba(255, 201, 60, 0.85); color: var(--ink); }
 .tbtn svg { width: 30px; height: 30px; }
 body.is-touch .hud__bl { bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
@@ -173,7 +179,7 @@ body.is-touch .hud__br { bottom: calc(110px + env(safe-area-inset-bottom, 0px));
   .slot { width: 72px; height: 72px; border-radius: 18px; }
   .slot svg { width: 46px; height: 46px; }
   .touch .tbtn { width: 60px; height: 60px; }
-  .touch .tbtn--sm { width: 52px; height: 52px; }
+  body.is-kid .touch .tbtn { width: 84px; height: 84px; }
   .ammo { width: 58px; height: 58px; border-radius: 15px; }
   .ammo svg { width: 38px; height: 38px; }
 }

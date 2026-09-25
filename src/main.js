@@ -9,8 +9,15 @@ import { parts, emit, updateParticles, burst } from './particles.js';
 import { initAudio, sfx, setEngine, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
 /* ================= Game state ================= */
-const CC = [{ base: 30, ai: 0.9, label: '50 cc' }, { base: 36, ai: 0.96, label: '100 cc' }, { base: 43, ai: 1.0, label: '150 cc' }];
-let ccIdx = 1, selected = 0;
+const CC = [
+  { base: 30, ai: 0.9, label: '50 cc', in: 'v 50 cc' },
+  { base: 36, ai: 0.96, label: '100 cc', in: 've 100 cc' },
+  { base: 43, ai: 1.0, label: '150 cc', in: 've 150 cc' },
+  // kids' mode: automatic throttle, gentle steering, slow and forgiving opponents
+  { base: 28, ai: 0.86, label: 'Dětský režim', in: 'v dětském režimu' },
+];
+let ccIdx = 1, selected = 0, kid = store.get('dk-kid') === '1';
+const cls = () => (kid ? 3 : ccIdx);
 let state = 'menu', paused = false, raceTime = 0, cdT = 0, cdShown = null, finishCount = 0, doneT = 0, gTime = 0;
 let player = null, launchAt = null;
 const projectiles = [], hazards = [];
@@ -32,9 +39,10 @@ function resetKart(k, slot) {
     drifting: false, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
     item: null, pending: null, rollT: 0, hogs: 1, hogCd: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
   });
-  k.ai.skill = CC[ccIdx].ai * rnd(0.96, 1.02);
+  k.ai.skill = CC[cls()].ai * rnd(0.96, 1.02);
   k.ai.itemT = 0;
   k.ai.hogT = rnd(4, 8);
+  k.kid = false;
   syncKart(k, 0);
 }
 function placeGrid() {
@@ -43,6 +51,7 @@ function placeGrid() {
   order.forEach((k, slot) => resetKart(k, slot));
   player = karts.find((k) => k.ch === CHARS[selected]);
   player.hogs = 3;
+  player.kid = kid;
   karts.forEach((k) => (k.isPlayer = k === player));
 }
 
@@ -61,7 +70,7 @@ function syncKart(k, dt) {
 /* ================= Input ================= */
 const keys = new Set();
 const touch = { left: false, right: false, brake: false, drift: false };
-let itemPressed = false, hogPressed = false, padItemPrev = false, padHogPrev = false;
+let firePressed = false, padFirePrev = false;
 const isTouch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
 if (isTouch) document.body.classList.add('is-touch');
 
@@ -69,8 +78,7 @@ addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
   keys.add(e.code);
-  if (['KeyE', 'KeyX'].includes(e.code)) itemPressed = true;
-  if (['KeyQ', 'KeyF', 'ControlLeft', 'ControlRight'].includes(e.code)) hogPressed = true;
+  if (['Space', 'ControlLeft', 'ControlRight'].includes(e.code)) firePressed = true;
   if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
   if (e.code === 'KeyM') toggleMute();
   if (e.code === 'Enter' && state === 'menu') startRace();
@@ -80,7 +88,7 @@ addEventListener('blur', () => keys.clear());
 
 document.querySelectorAll('.tbtn').forEach((b) => {
   const t = b.dataset.t;
-  const on = (e) => { e.preventDefault(); if (t === 'item') itemPressed = true; else if (t === 'hog') hogPressed = true; else touch[t] = true; b.classList.add('on'); };
+  const on = (e) => { e.preventDefault(); if (t === 'fire') firePressed = true; else touch[t] = true; b.classList.add('on'); };
   const off = (e) => { e.preventDefault(); if (t in touch) touch[t] = false; b.classList.remove('on'); };
   b.addEventListener('pointerdown', on);
   b.addEventListener('pointerup', off);
@@ -98,7 +106,7 @@ function playerInput() {
   let steer = (has('ArrowRight', 'KeyD') ? 1 : 0) - (has('ArrowLeft', 'KeyA') ? 1 : 0);
   let throttle = has('ArrowUp', 'KeyW');
   let brake = has('ArrowDown', 'KeyS');
-  let drift = has('Space', 'ShiftLeft', 'ShiftRight');
+  let drift = has('ShiftLeft', 'ShiftRight');
   if (isTouch) {
     steer += (touch.right ? 1 : 0) - (touch.left ? 1 : 0);
     brake = brake || touch.brake;
@@ -113,20 +121,28 @@ function playerInput() {
     throttle = throttle || b(7) || b(0);
     brake = brake || b(6) || b(1);
     drift = drift || b(5) || b(4);
-    const it = b(2), hg = b(3);
-    if (it && !padItemPrev) itemPressed = true;
-    if (hg && !padHogPrev) hogPressed = true;
-    padItemPrev = it; padHogPrev = hg;
+    const fire = b(2) || b(3);
+    if (fire && !padFirePrev) firePressed = true;
+    padFirePrev = fire;
   }
+  if (kid) return { steer: clamp(steer + kidAssist(player, steer), -1, 1), throttle: true, brake: false, drift: false };
   return { steer: clamp(steer, -1, 1), throttle, brake, drift };
+}
+// Kids' mode helper: a gentle pull towards the road ahead, strong when the child does not steer at all
+function kidAssist(k, steer) {
+  const ti = (k.idx + 14) % N, lane = clamp(k.lat, -W * 0.55, W * 0.55);
+  const tx = P[ti].x + S[ti].x * lane, tz = P[ti].z + S[ti].z * lane;
+  const diff = wrapA(Math.atan2(tx - k.x, tz - k.z) - k.h);
+  return clamp(-diff * 1.6, -1, 1) * (steer ? 0.25 : 0.7);
 }
 const NOINPUT = { steer: 0, throttle: false, brake: false, drift: false };
 
 /* ================= Kart physics ================= */
 function stepKart(k, inp, dt) {
-  const s = k.stats, base = CC[ccIdx].base;
+  const s = k.stats, base = CC[cls()].base;
   if (k.spin > 0) { k.spin -= dt; k.h += dt * 11 * k.spinDir; k.speed *= Math.pow(0.12, dt); k.drifting = false; inp = NOINPUT; }
-  k.st += (inp.steer - k.st) * Math.min(1, dt * 10);
+  // kids get a slow, smooth wheel so a tap on a key never jerks the kart
+  k.st += (inp.steer - k.st) * Math.min(1, dt * (k.kid ? 3 : 10));
   k.thr = inp.throttle;
   const off = Math.abs(k.lat) > W + 1.2;
   let maxS = base * s.speed * k.mul;
@@ -153,7 +169,7 @@ function stepKart(k, inp, dt) {
     const into = k.st * k.driftDir;
     yaw = k.driftDir * (1.3 + 0.75 * into) * s.handling;
     if (!off) k.driftCharge += dt * (0.7 + 0.5 * Math.max(0, into));
-  } else yaw = k.st * 2.0 * s.handling;
+  } else yaw = k.st * 2.0 * s.handling * (k.kid ? 0.8 : 1);
   k.h -= yaw * sf * dt;
 
   const fx = Math.sin(k.h), fz = Math.cos(k.h);
@@ -244,7 +260,7 @@ function aiInput(k, dt) {
   const inp = { steer: clamp(-diff * 2.4, -1, 1), throttle: true, brake: false, drift: false };
   const ahead = (k.idx + 30) % N;
   const bend = Math.acos(clamp(T[k.idx].x * T[ahead].x + T[k.idx].z * T[ahead].z, -1, 1));
-  if (bend > 0.85 && k.speed > CC[ccIdx].base * 0.78) inp.throttle = false;
+  if (bend > 0.85 && k.speed > CC[cls()].base * 0.78) inp.throttle = false;
   if (Math.abs(diff) > 0.9 && k.speed > 12) inp.brake = true;
   if (k.item) {
     a.itemT -= dt;
@@ -257,7 +273,7 @@ function aiInput(k, dt) {
   a.hogT -= dt;
   if (k.hogs > 0 && a.hogT <= 0) {
     const tg = targetAhead(k);
-    if (tg && tg.prog - k.prog < 60) { throwHog(k); a.hogT = rnd(2.5, 5); }
+    if (tg && tg.prog - k.prog < 60) { throwHog(k); a.hogT = kid ? rnd(6, 10) : rnd(2.5, 5); }
   }
   return inp;
 }
@@ -364,9 +380,19 @@ document.querySelectorAll('#cc button').forEach((b) => b.addEventListener('click
   document.querySelectorAll('#cc button').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
   showBest();
 }));
+document.querySelectorAll('#mode button').forEach((b) => b.addEventListener('click', () => setKid(b.dataset.kid === '1')));
+function setKid(on) {
+  kid = on;
+  store.set('dk-kid', kid ? '1' : '0');
+  document.querySelectorAll('#mode button').forEach((x) => x.setAttribute('aria-checked', String((x.dataset.kid === '1') === kid)));
+  document.body.classList.toggle('is-kid', kid);
+  show('#ccBlock', !kid);
+  placeGrid(); showBest();
+}
 function showBest() {
-  const b = store.get('dk-best-' + ccIdx);
-  $('#best').textContent = b ? `Tvůj nejlepší čas v ${CC[ccIdx].label}: ${fmt(Number(b))}` : `V ${CC[ccIdx].label} zatím nemáš zajetý čas.`;
+  const c = CC[cls()], b = store.get('dk-best-' + cls());
+  const t = b ? `Tvůj nejlepší čas ${c.in}: ${fmt(Number(b))}` : `${c.in} zatím nemáš zajetý čas.`;
+  $('#best').textContent = t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 function show(id, on) { $(id).hidden = !on; }
@@ -412,16 +438,17 @@ function showResults() {
   state = 'results';
   silenceEngine();
   show('#hud', false); show('#touch', false);
-  const rows = karts.map((k) => ({ k, t: k.finished ? k.finishTime : raceTime + ((LAPS * N - k.prog) * SEG) / (CC[ccIdx].base * 0.85), est: !k.finished }));
+  const rows = karts.map((k) => ({ k, t: k.finished ? k.finishTime : raceTime + ((LAPS * N - k.prog) * SEG) / (CC[cls()].base * 0.85), est: !k.finished }));
   rows.sort((a, b) => a.t - b.t);
   $('#resBody').innerHTML = rows.map((r, i) =>
     `<tr class="${r.k.isPlayer ? 'me' : ''}"><td>${i + 1}.</td><td><span class="dot" style="background:${hex(r.k.ch.kart)}"></span>${r.k.ch.name}</td><td class="${r.est ? 'est' : ''}">${r.est ? '≈ ' : ''}${fmt(r.t)}</td></tr>`).join('');
   const place = rows.findIndex((r) => r.k.isPlayer) + 1;
   $('#resTitle').textContent = `${place}. místo`;
-  $('#resEyebrow').textContent = place === 1 ? 'Vítězství · Slunečný okruh' : `Cíl · ${CC[ccIdx].label}`;
-  const key = 'dk-best-' + ccIdx, prev = Number(store.get(key));
-  if (!prev || player.finishTime < prev) { store.set(key, String(player.finishTime)); $('#resBest').textContent = `Nový osobní rekord v ${CC[ccIdx].label}!`; }
-  else $('#resBest').textContent = `Osobní rekord v ${CC[ccIdx].label}: ${fmt(prev)}`;
+  const c = CC[cls()];
+  $('#resEyebrow').textContent = place === 1 ? 'Vítězství · Slunečný okruh' : `Cíl · ${c.label}`;
+  const key = 'dk-best-' + cls(), prev = Number(store.get(key));
+  if (!prev || player.finishTime < prev) { store.set(key, String(player.finishTime)); $('#resBest').textContent = `Nový osobní rekord ${c.in}!`; }
+  else $('#resBest').textContent = `Osobní rekord ${c.in}: ${fmt(prev)}`;
   show('#results', true);
   $('#againBtn').focus();
 }
@@ -465,8 +492,12 @@ function simulate(dt) {
     let inp;
     if (k.isPlayer && !k.finished) {
       inp = playerInput();
-      if (itemPressed && k.rollT <= 0) useItem(k);
-      if (hogPressed) { if (k.hogs > 0) throwHog(k); else if (msgTimer <= 0) showMsg('Žádní ježci!', 0.8); }
+      // one fire button: the item from a box goes first, otherwise a hedgehog
+      if (firePressed) {
+        if (k.item && k.rollT <= 0) useItem(k);
+        else if (k.hogs > 0) throwHog(k);
+        else if (msgTimer <= 0 && k.rollT <= 0) showMsg('Žádní ježci!', 0.8);
+      }
     } else inp = aiInput(k, dt);
     if (k.hogCd > 0) k.hogCd -= dt;
     if (k.rollT > 0) { k.rollT -= dt; if (k.rollT <= 0) { k.item = k.pending; k.pending = null; } }
@@ -483,7 +514,7 @@ function simulate(dt) {
       if (k.wrongT > 1 && msgTimer <= 0) showMsg('Opačný směr!');
     }
   }
-  itemPressed = hogPressed = false;
+  firePressed = false;
 
   // kart-to-kart bumps
   for (let a = 0; a < karts.length; a++) for (let b = a + 1; b < karts.length; b++) {
@@ -628,9 +659,10 @@ function loop(now) {
 ccIdx = clamp(Number(store.get('dk-cc') ?? 1) || 0, 0, 2);
 document.querySelectorAll('#cc button').forEach((x) => x.setAttribute('aria-checked', String(Number(x.dataset.cc) === ccIdx)));
 selectChar(clamp(Number(store.get('dk-char')) || 0, 0, CHARS.length - 1));
-showBest();
+setKid(kid);
 addEventListener('resize', resize);
 resize();
 camera.position.set(player.x + 10, 5, player.z + 10);
 requestAnimationFrame(loop);
 
+window.__main = { camera, karts, get player() { return player; }, get state() { return state; }, frameUpdate }; // DBG

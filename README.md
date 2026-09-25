@@ -27,22 +27,26 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
   před tebou; každý ježek zrovna něco dělá (sedí na záchodě, čte noviny, spí, hraje na kytaru…)
   a činnosti se střídají
 - krabice s otazníkem: oheň (tři ohnivé koule), zmrzlina (past za sebe), turbo
-- třídy 50 / 100 / 150 cc, minimapa, osobní rekordy
+- třídy 50 / 100 / 150 cc a dětský režim, minimapa, osobní rekordy
 - syntetizovaný zvuk motoru s řazením, motory soupeřů s dopplerovým efektem
 - ovládání klávesnicí, gamepadem i dotykem
 
 ## Ovládání
 
-| Klávesa              | Akce                                        |
-| -------------------- | ------------------------------------------- |
-| ↑ ← → ↓ / WASD       | plyn, řízení, brzda                         |
-| Mezerník             | drift — drž v zatáčce, puštěním získáš turbo |
-| Q / Ctrl             | hodit ježka                                 |
-| E                    | použít předmět z krabice                    |
-| Esc                  | pauza                                       |
-| M                    | zvuk zapnout / vypnout                      |
+| Klávesa              | Akce                                                        |
+| -------------------- | ----------------------------------------------------------- |
+| ← → / A D            | zatáčení                                                    |
+| ↑ ↓ / W S            | plyn, brzda (v dětském režimu jede plyn sám)                |
+| Mezerník / Ctrl      | střelba: nejdřív věc z krabice, jinak ježek                 |
+| Shift                | drift — drž v zatáčce, puštěním získáš turbo                |
+| Esc                  | pauza                                                       |
+| M                    | zvuk zapnout / vypnout                                      |
 
-Gamepad: RT plyn, LT brzda, RB drift, Y ježek, X předmět.
+Gamepad: RT plyn, LT brzda, RB drift, X nebo Y střelba.
+
+**Dětský režim** (volba v menu): plyn jede sám, řízení je pomalé a plynulé a jemně drží motokáru
+na silnici, soupeři jsou pomalejší. Na dotykové obrazovce zůstanou jen tři velká tlačítka:
+doleva, doprava a střílej.
 
 ## Nápady na další práci
 
