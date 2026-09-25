@@ -4,5 +4,5 @@ export default defineConfig({
   // Relative asset paths, so the build also runs from a subfolder such as GitHub Pages
   base: './',
   build: { chunkSizeWarningLimit: 800 },
-  server: { host: true },
+  server: { host: true, port: 5188 },
 });

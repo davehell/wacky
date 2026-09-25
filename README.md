@@ -12,7 +12,7 @@ npm install
 npm run dev
 ```
 
-Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5173).
+Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
 
 `npm run build` vytvoří statickou verzi ve složce `dist/`, kterou lze nahrát na jakýkoli hosting
 (třeba GitHub Pages).
