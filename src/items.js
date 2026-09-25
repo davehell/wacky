@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { rnd } from './util.js';
+import { BufferGeometryUtils } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { rnd, col } from './util.js';
 import { scene, canvasTex, std, mesh } from './render.js';
 import { N, P, S } from './track.js';
 
@@ -7,9 +8,10 @@ import { N, P, S } from './track.js';
 const ICONS = {
   hedgehog: '<svg viewBox="0 0 64 64"><path d="M6 46 9 33l5 5 3-15 6 10 4-16 6 13 5-14 5 13 6-9 3 26z" fill="#5a3620"/><ellipse cx="44" cy="44" rx="14" ry="10" fill="#d9a066"/><circle cx="48" cy="40" r="2.4" fill="#14213d"/><circle cx="58" cy="45" r="3" fill="#14213d"/><rect x="6" y="45" width="40" height="5" rx="2.5" fill="#5a3620"/></svg>',
   icecream: '<svg viewBox="0 0 64 64"><path d="M20 30h24L32 60z" fill="#e0a458" stroke="#b97c35" stroke-width="2" stroke-linejoin="round"/><circle cx="32" cy="24" r="14" fill="#f7a8b8"/><circle cx="24" cy="30" r="7" fill="#f7a8b8"/><circle cx="40" cy="30" r="7" fill="#f7a8b8"/><circle cx="34" cy="9" r="4" fill="#ef476f"/></svg>',
+  fire: '<svg viewBox="0 0 64 64"><defs><g id="fl"><path d="M12 30C5 30 1 25 2 19c1-5 5-7 5-13 4 3 6 6 6 9 2-2 2-5 2-8 5 4 8 9 8 14 0 6-5 9-11 9z" fill="#ff7b25" stroke="#b33a0e" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="22" r="5" fill="#ffd166"/></g></defs><use href="#fl" x="20" y="1"/><use href="#fl" x="2" y="31"/><use href="#fl" x="38" y="31"/></svg>',
   turbo: '<svg viewBox="0 0 64 64"><path d="M36 4 12 36h16l-6 24 30-36H35z" fill="#ffc93c" stroke="#14213d" stroke-width="3" stroke-linejoin="round"/></svg>',
 };
-const ITEM_NAMES = { hedgehog: 'Ježek', icecream: 'Zmrzlina', turbo: 'Turbo' };
+const ITEM_NAMES = { fire: 'Oheň', icecream: 'Zmrzlina', turbo: 'Turbo' };
 
 const qTex = canvasTex(128, 128, (g, w, h) => {
   const gr = g.createLinearGradient(0, 0, w, h);
@@ -33,22 +35,42 @@ for (const f of [0.17, 0.46, 0.73]) {
   }
 }
 
-function makeHog() {
-  const outer = new THREE.Group(), g = new THREE.Group();
-  outer.add(g);
-  g.add(mesh(new THREE.SphereGeometry(0.55, 16, 12), std(0x6b4226, { roughness: 0.8 })));
-  const sp = new THREE.ConeGeometry(0.12, 0.5, 6), spm = std(0x3b2414, { roughness: 0.8 });
-  const up = new THREE.Vector3(0, 1, 0);
+// Shared by every thrown hedgehog, since there are a lot of them now
+const HOG_BODY = new THREE.SphereGeometry(0.55, 16, 12), HOG_FACE = new THREE.SphereGeometry(0.3, 12, 10), HOG_NOSE = new THREE.SphereGeometry(0.08, 8, 6);
+const HOG_SPIKES = (() => {
+  const up = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion(), m = new THREE.Matrix4(), one = new THREE.Vector3(1, 1, 1), geos = [];
+  const cone = new THREE.ConeGeometry(0.12, 0.5, 6);
   for (let i = 0; i < 26; i++) {
     const y = 1 - (2 * (i + 0.5)) / 26, r = Math.sqrt(1 - y * y), th = i * 2.39996;
     const dir = new THREE.Vector3(Math.cos(th) * r, y, Math.sin(th) * r);
-    const c = mesh(sp, spm); c.position.copy(dir).multiplyScalar(0.58); c.quaternion.setFromUnitVectors(up, dir); g.add(c);
+    q.setFromUnitVectors(up, dir);
+    geos.push(cone.clone().applyMatrix4(m.compose(dir.clone().multiplyScalar(0.58), q, one)));
   }
-  const face = mesh(new THREE.SphereGeometry(0.3, 12, 10), std(0xe0b07a)); face.position.set(0, -0.05, 0.42); g.add(face);
-  const nose = mesh(new THREE.SphereGeometry(0.08, 8, 6), std(0x121212)); nose.position.set(0, -0.02, 0.72); g.add(nose);
+  return BufferGeometryUtils.mergeBufferGeometries(geos);
+})();
+function makeHog() {
+  const outer = new THREE.Group(), g = new THREE.Group();
+  outer.add(g);
+  g.add(mesh(HOG_BODY, std(0x6b4226, { roughness: 0.8 })));
+  g.add(mesh(HOG_SPIKES, std(0x3b2414, { roughness: 0.8 })));
+  const face = mesh(HOG_FACE, std(0xe0b07a)); face.position.set(0, -0.05, 0.42); g.add(face);
+  const nose = mesh(HOG_NOSE, std(0x121212)); nose.position.set(0, -0.02, 0.72); g.add(nose);
   outer.userData.roll = g;
   scene.add(outer);
   return outer;
+}
+// A glowing ball of fire: bright core inside a soft additive halo
+const FIRE_CORE = new THREE.SphereGeometry(0.45, 16, 12), FIRE_HALO = new THREE.SphereGeometry(0.85, 16, 12);
+const fireCoreMat = new THREE.MeshBasicMaterial({ color: col(0xfff1a8) });
+const fireHaloMat = new THREE.MeshBasicMaterial({ color: col(0xff7b25), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+function makeFireball() {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(FIRE_CORE, fireCoreMat));
+  const halo = new THREE.Mesh(FIRE_HALO, fireHaloMat);
+  g.add(halo);
+  g.userData.halo = halo;
+  scene.add(g);
+  return g;
 }
 function makeIceCream() {
   const g = new THREE.Group();
@@ -62,4 +84,4 @@ function makeIceCream() {
   return g;
 }
 
-export { ICONS, ITEM_NAMES, boxes, makeHog, makeIceCream };
+export { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, makeIceCream };

@@ -76,6 +76,10 @@ const sfx = {
   hit: () => { note(300, 0, 0.3, 'sine', 0.25, 90); whoosh(0, 0.3, 'bandpass', 1600, 300, 0.25, 1.2); note(880, 0.05, 0.12, 'triangle', 0.05, 440); },
   boost: () => { whoosh(0, 0.5, 'bandpass', 500, 3000, 0.3, 1.4); note(330, 0, 0.35, 'triangle', 0.06, 660); },
   throw: () => whoosh(0, 0.22, 'bandpass', 2200, 600, 0.18, 2),
+  // a soft rising "fwoosh" per fireball
+  fire: () => { [0, 0.06, 0.12].forEach((t) => whoosh(t, 0.4, 'bandpass', 350, 1500, 0.12, 0.9)); note(220, 0, 0.35, 'triangle', 0.05, 440); },
+  // little squeak of a hedgehog climbing aboard
+  hog: () => { note(784, 0, 0.09, 'triangle', 0.06, 1175); note(1175, 0.07, 0.12, 'triangle', 0.05, 1568); },
   beep: () => { note(587, 0, 0.3, 'sine', 0.16); note(1174, 0, 0.2, 'sine', 0.035); },
   go: () => { note(1175, 0, 0.6, 'sine', 0.13); note(1568, 0, 0.6, 'sine', 0.08); note(2350, 0, 0.3, 'sine', 0.02); },
   finish: () => { [784, 988, 1175, 1568].forEach((f, i) => note(f, i * 0.12, i === 3 ? 0.7 : 0.18, 'triangle', 0.09)); },

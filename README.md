@@ -23,7 +23,10 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
   zrychlením a ovládáním
 - Slunečný okruh na tři kola proti pěti soupeřům
 - drift s turbem (modré a oranžové jiskry), raketový start
-- krabice s otazníkem: ježek (kutálí se za soupeřem před tebou), zmrzlina (past za sebe), turbo
+- ježci na trati jako v původní hře: přejetím je sebereš (až 10) a pak je házíš — kutálí se za soupeřem
+  před tebou; každý ježek zrovna něco dělá (sedí na záchodě, čte noviny, spí, hraje na kytaru…)
+  a činnosti se střídají
+- krabice s otazníkem: oheň (tři ohnivé koule), zmrzlina (past za sebe), turbo
 - třídy 50 / 100 / 150 cc, minimapa, osobní rekordy
 - syntetizovaný zvuk motoru s řazením, motory soupeřů s dopplerovým efektem
 - ovládání klávesnicí, gamepadem i dotykem
@@ -34,11 +37,12 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
 | -------------------- | ------------------------------------------- |
 | ↑ ← → ↓ / WASD       | plyn, řízení, brzda                         |
 | Mezerník             | drift — drž v zatáčce, puštěním získáš turbo |
-| E                    | použít předmět                              |
+| Q / Ctrl             | hodit ježka                                 |
+| E                    | použít předmět z krabice                    |
 | Esc                  | pauza                                       |
 | M                    | zvuk zapnout / vypnout                      |
 
-Gamepad: RT plyn, LT brzda, RB drift, X předmět.
+Gamepad: RT plyn, LT brzda, RB drift, Y ježek, X předmět.
 
 ## Nápady na další práci
 

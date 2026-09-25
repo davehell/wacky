@@ -22,7 +22,8 @@ The audience is children: characters must be cute and recognisable at a glance, 
 | `src/render.js`     | renderer, scene, camera, sky, sun, `canvasTex`, material cache `std`, `mesh`       |
 | `src/track.js`      | the circuit (spline, road, curbs, fences), scenery, track queries (`nearest`…)     |
 | `src/characters.js` | the six animal drivers, their karts and menu portraits                             |
-| `src/items.js`      | item boxes, hedgehog projectile, ice-cream hazard, HUD icons                       |
+| `src/items.js`      | item boxes, hedgehog projectile, fireball, ice-cream hazard, HUD icons             |
+| `src/hedgehogs.js`  | hedgehogs sitting on the road as ammo pickups, their activities and props         |
 | `src/particles.js`  | pooled additive particles                                                          |
 | `src/audio.js`      | Web Audio: synthesised engine, opponents' engines with doppler, wind, skid, sfx    |
 | `src/main.js`       | game state, input, kart physics, AI, HUD, menu, main loop                          |

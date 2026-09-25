@@ -3,7 +3,8 @@ import { $, clamp, rnd, wrapA, store, hex } from './util.js';
 import { stage, renderer, scene, camera, sky, sun } from './render.js';
 import { N, W, LIM, LAPS, P, T, S, SEG, headingAt, nearest, clouds } from './track.js';
 import { CHARS, makeKart, makePortraits } from './characters.js';
-import { ICONS, ITEM_NAMES, boxes, makeHog, makeIceCream } from './items.js';
+import { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, makeIceCream } from './items.js';
+import { MAX_HOGS, hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs } from './hedgehogs.js';
 import { parts, emit, updateParticles, burst } from './particles.js';
 import { initAudio, sfx, setEngine, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
@@ -17,7 +18,7 @@ const projectiles = [], hazards = [];
 const karts = CHARS.map((ch) => {
   const v = makeKart(ch);
   scene.add(v.root);
-  return { ch, v, stats: ch.stats, ai: { t: 0, phase: rnd(0, 6.28), freq: rnd(0.25, 0.45), itemT: 0, skill: 1 } };
+  return { ch, v, stats: ch.stats, ai: { t: 0, phase: rnd(0, 6.28), freq: rnd(0.25, 0.45), itemT: 0, hogT: 0, skill: 1 } };
 });
 
 function resetKart(k, slot) {
@@ -29,10 +30,11 @@ function resetKart(k, slot) {
     x: P[i].x + S[i].x * lat, z: P[i].z + S[i].z * lat, y: 0, hopV: 0,
     h: headingAt(i), speed: 0, vx: 0, vz: 0, st: 0,
     drifting: false, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
-    item: null, pending: null, rollT: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
+    item: null, pending: null, rollT: 0, hogs: 1, hogCd: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
   });
   k.ai.skill = CC[ccIdx].ai * rnd(0.96, 1.02);
   k.ai.itemT = 0;
+  k.ai.hogT = rnd(4, 8);
   syncKart(k, 0);
 }
 function placeGrid() {
@@ -40,6 +42,7 @@ function placeGrid() {
   order.splice(4, 0, karts.find((k) => k.ch === CHARS[selected]));
   order.forEach((k, slot) => resetKart(k, slot));
   player = karts.find((k) => k.ch === CHARS[selected]);
+  player.hogs = 3;
   karts.forEach((k) => (k.isPlayer = k === player));
 }
 
@@ -58,7 +61,7 @@ function syncKart(k, dt) {
 /* ================= Input ================= */
 const keys = new Set();
 const touch = { left: false, right: false, brake: false, drift: false };
-let itemPressed = false, padItemPrev = false;
+let itemPressed = false, hogPressed = false, padItemPrev = false, padHogPrev = false;
 const isTouch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
 if (isTouch) document.body.classList.add('is-touch');
 
@@ -66,7 +69,8 @@ addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
   keys.add(e.code);
-  if (['KeyE', 'KeyX', 'ControlLeft', 'ControlRight'].includes(e.code)) itemPressed = true;
+  if (['KeyE', 'KeyX'].includes(e.code)) itemPressed = true;
+  if (['KeyQ', 'KeyF', 'ControlLeft', 'ControlRight'].includes(e.code)) hogPressed = true;
   if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
   if (e.code === 'KeyM') toggleMute();
   if (e.code === 'Enter' && state === 'menu') startRace();
@@ -76,8 +80,8 @@ addEventListener('blur', () => keys.clear());
 
 document.querySelectorAll('.tbtn').forEach((b) => {
   const t = b.dataset.t;
-  const on = (e) => { e.preventDefault(); if (t === 'item') itemPressed = true; else touch[t] = true; b.classList.add('on'); };
-  const off = (e) => { e.preventDefault(); if (t !== 'item') touch[t] = false; b.classList.remove('on'); };
+  const on = (e) => { e.preventDefault(); if (t === 'item') itemPressed = true; else if (t === 'hog') hogPressed = true; else touch[t] = true; b.classList.add('on'); };
+  const off = (e) => { e.preventDefault(); if (t in touch) touch[t] = false; b.classList.remove('on'); };
   b.addEventListener('pointerdown', on);
   b.addEventListener('pointerup', off);
   b.addEventListener('pointercancel', off);
@@ -109,9 +113,10 @@ function playerInput() {
     throttle = throttle || b(7) || b(0);
     brake = brake || b(6) || b(1);
     drift = drift || b(5) || b(4);
-    const it = b(2) || b(3);
+    const it = b(2), hg = b(3);
     if (it && !padItemPrev) itemPressed = true;
-    padItemPrev = it;
+    if (hg && !padHogPrev) hogPressed = true;
+    padItemPrev = it; padHogPrev = hg;
   }
   return { steer: clamp(steer, -1, 1), throttle, brake, drift };
 }
@@ -200,9 +205,12 @@ function useItem(k) {
   if (!it) return;
   k.item = null;
   if (it === 'turbo') { k.boost = Math.max(k.boost, 1.6); if (k.isPlayer) sfx.boost(); }
-  if (it === 'hedgehog') {
-    projectiles.push({ idx: (k.idx + 2) % N, f: 0, lat: k.lat, speed: Math.max(58, k.speed + 24), owner: k, life: 5, age: 0, target: targetAhead(k), mesh: makeHog() });
-    if (k.isPlayer) sfx.throw();
+  if (it === 'fire') {
+    // three fireballs fanning out along the road
+    for (const s of [-1, 0, 1]) {
+      projectiles.push({ kind: 'fire', idx: (k.idx + 2) % N, f: 0, lat: k.lat + s * 1.2, latV: s * 6, speed: Math.max(72, k.speed + 34), owner: k, life: 2.6, age: 0, target: null, mesh: makeFireball() });
+    }
+    if (k.isPlayer) sfx.fire();
   }
   if (it === 'icecream') {
     const fx = Math.sin(k.h), fz = Math.cos(k.h);
@@ -213,11 +221,17 @@ function useItem(k) {
     if (k.isPlayer) sfx.throw();
   }
 }
+function throwHog(k) {
+  if (k.hogs <= 0 || k.hogCd > 0 || k.spin > 0) return;
+  k.hogs--; k.hogCd = 0.3;
+  projectiles.push({ kind: 'hog', idx: (k.idx + 2) % N, f: 0, lat: k.lat, speed: Math.max(58, k.speed + 24), owner: k, life: 5, age: 0, target: targetAhead(k), mesh: makeHog() });
+  if (k.isPlayer) sfx.throw();
+}
 function rollItem(k) {
   const rank = karts.filter((o) => o.prog > k.prog).length + 1;
   const pT = 0.08 + 0.09 * (rank - 1), pH = 0.46;
   const r = Math.random();
-  return r < pT ? 'turbo' : r < pT + pH ? 'hedgehog' : 'icecream';
+  return r < pT ? 'turbo' : r < pT + pH ? 'fire' : 'icecream';
 }
 
 function aiInput(k, dt) {
@@ -235,18 +249,24 @@ function aiInput(k, dt) {
   if (k.item) {
     a.itemT -= dt;
     if (a.itemT <= 0) {
-      if (k.item === 'hedgehog') { const tg = targetAhead(k); if ((tg && tg.prog - k.prog < 70) || a.itemT < -8) useItem(k); }
+      if (k.item === 'fire') { const tg = targetAhead(k); if ((tg && tg.prog - k.prog < 55) || a.itemT < -8) useItem(k); }
       else if (k.item === 'turbo') { if (bend < 0.3) useItem(k); }
       else useItem(k);
     }
+  }
+  a.hogT -= dt;
+  if (k.hogs > 0 && a.hogT <= 0) {
+    const tg = targetAhead(k);
+    if (tg && tg.prog - k.prog < 60) { throwHog(k); a.hogT = rnd(2.5, 5); }
   }
   return inp;
 }
 
 /* ================= HUD ================= */
-const el = { pos: $('#pos'), lap: $('#lap'), time: $('#time'), speed: $('#speed'), slot: $('#slot'), slotLabel: $('#slotLabel'), msg: $('#msg'), cd: $('#cd'), drift: $('#driftBar') };
+const el = { hogs: $('#hogs'), ammo: $('#ammo'), pos: $('#pos'), lap: $('#lap'), time: $('#time'), speed: $('#speed'), slot: $('#slot'), slotLabel: $('#slotLabel'), msg: $('#msg'), cd: $('#cd'), drift: $('#driftBar') };
 const fmt = (t) => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(2).padStart(5, '0')}`; };
-let msgTimer = 0, lastSlot = '', lastHud = {};
+let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1;
+$('#hogIcon').innerHTML = ICONS.hedgehog;
 function showMsg(t, dur = 1.3) { el.msg.textContent = t; el.msg.classList.remove('pop'); void el.msg.offsetWidth; el.msg.classList.add('pop'); el.msg.hidden = false; msgTimer = dur; }
 function setText(key, node, v) { if (lastHud[key] !== v) { node.textContent = v; lastHud[key] = v; } }
 const ranked = () => karts.slice().sort((a, b) => (b.finished ? 1e9 - b.finishTime : b.prog) - (a.finished ? 1e9 - a.finishTime : a.prog));
@@ -257,8 +277,15 @@ function updateHud(dt) {
   setText('lap', el.lap, `${clamp(player.lap + 1, 1, LAPS)}/${LAPS}`);
   setText('time', el.time, fmt(player.finished ? player.finishTime : raceTime));
   setText('speed', el.speed, String(Math.round(Math.abs(player.speed) * 3.6)));
+  if (player.hogs !== lastHogs) {
+    el.hogs.textContent = String(player.hogs);
+    el.ammo.classList.toggle('empty', player.hogs === 0);
+    el.ammo.classList.toggle('full', player.hogs >= MAX_HOGS);
+    if (player.hogs > lastHogs && lastHogs >= 0) { el.ammo.classList.remove('pop'); void el.ammo.offsetWidth; el.ammo.classList.add('pop'); }
+    lastHogs = player.hogs;
+  }
   let slot;
-  if (player.rollT > 0) slot = 'roll:' + ['hedgehog', 'icecream', 'turbo'][Math.floor(gTime * 14) % 3];
+  if (player.rollT > 0) slot = 'roll:' + ['fire', 'icecream', 'turbo'][Math.floor(gTime * 14) % 3];
   else slot = player.item || '';
   if (slot !== lastSlot) {
     const key = slot.replace('roll:', '');
@@ -298,6 +325,12 @@ function drawMini() {
   if (!mb) return;
   mctx.clearRect(0, 0, mb.size, mb.size);
   mctx.drawImage(mb.track, 0, 0);
+  mctx.fillStyle = '#8a5a30';
+  for (const sp of hedgehogSpots) {
+    if (!sp.here) continue;
+    const [x, y] = mapPt(sp.x, sp.z);
+    mctx.beginPath(); mctx.arc(x, y, 2.2 * mb.dpr, 0, Math.PI * 2); mctx.fill();
+  }
   for (const k of karts.slice().sort((a, b) => (a.isPlayer ? 1 : 0) - (b.isPlayer ? 1 : 0))) {
     const [x, y] = mapPt(k.x, k.z), r = (k.isPlayer ? 7 : 5) * mb.dpr;
     mctx.beginPath(); mctx.arc(x, y, r, 0, Math.PI * 2);
@@ -344,11 +377,12 @@ function startRace() {
   for (const h of hazards) scene.remove(h.m);
   projectiles.length = hazards.length = 0;
   for (const b of boxes) { b.respawn = 0; b.m.visible = true; }
+  resetHedgehogs();
   for (const q of parts) q.life = 0;
   finishCount = 0; raceTime = 0; cdT = 3.6; cdShown = null; launchAt = null; doneT = 0;
   state = 'countdown'; paused = false;
   camH = player.h;
-  lastHud = {}; lastSlot = '-';
+  lastHud = {}; lastSlot = '-'; lastHogs = -1;
   el.msg.hidden = true; el.cd.hidden = true;
   show('#menu', false); show('#results', false); show('#pause', false); show('#hud', true); show('#touch', isTouch);
   requestAnimationFrame(setupMini);
@@ -432,7 +466,9 @@ function simulate(dt) {
     if (k.isPlayer && !k.finished) {
       inp = playerInput();
       if (itemPressed && k.rollT <= 0) useItem(k);
+      if (hogPressed) { if (k.hogs > 0) throwHog(k); else if (msgTimer <= 0) showMsg('Žádní ježci!', 0.8); }
     } else inp = aiInput(k, dt);
+    if (k.hogCd > 0) k.hogCd -= dt;
     if (k.rollT > 0) { k.rollT -= dt; if (k.rollT <= 0) { k.item = k.pending; k.pending = null; } }
     const lapBefore = k.lap;
     stepKart(k, inp, dt);
@@ -447,7 +483,7 @@ function simulate(dt) {
       if (k.wrongT > 1 && msgTimer <= 0) showMsg('Opačný směr!');
     }
   }
-  itemPressed = false;
+  itemPressed = hogPressed = false;
 
   // kart-to-kart bumps
   for (let a = 0; a < karts.length; a++) for (let b = a + 1; b < karts.length; b++) {
@@ -477,7 +513,14 @@ function simulate(dt) {
     }
   }
 
-  // hedgehogs
+  // hedgehogs sitting on the road
+  collectHedgehogs(karts, (k, sp) => {
+    k.hogs++;
+    burst(sp.x, 1, sp.z, 14, 0.75, 0.5, 0.25);
+    if (k.isPlayer) { sfx.hog(); if (k.hogs >= MAX_HOGS) showMsg('Plno ježků!', 0.9); }
+  });
+
+  // flying hedgehogs and fireballs
   for (let n = projectiles.length - 1; n >= 0; n--) {
     const pr = projectiles[n];
     pr.life -= dt; pr.age += dt;
@@ -487,18 +530,30 @@ function simulate(dt) {
       const ahead = (pr.target.idx - pr.idx + N) % N;
       if (ahead < 90) pr.lat += clamp(pr.target.lat - pr.lat, -16 * dt, 16 * dt);
     }
+    const fire = pr.kind === 'fire';
+    if (fire) pr.lat = clamp(pr.lat + pr.latV * dt, -W - 3, W + 3);
     const i0 = pr.idx, i1 = (pr.idx + 1) % N;
     const x = P[i0].x + (P[i1].x - P[i0].x) * pr.f + S[i0].x * pr.lat, z = P[i0].z + (P[i1].z - P[i0].z) * pr.f + S[i0].z * pr.lat;
-    pr.mesh.position.set(x, 0.62, z);
-    pr.mesh.rotation.y = headingAt(i0);
-    pr.mesh.userData.roll.rotation.x += (pr.speed * dt) / 0.6;
-    if (Math.random() < 0.5) emit(x, 0.2, z, rnd(-1, 1), rnd(0.5, 2), rnd(-1, 1), 0.4, 0.3, 0.18, 0.4, 2);
+    if (fire) {
+      pr.mesh.position.set(x, 0.95, z);
+      pr.mesh.userData.halo.scale.setScalar(1 + Math.sin(pr.age * 30) * 0.12);
+      for (let e = 0; e < 2; e++) emit(x + rnd(-0.3, 0.3), 0.95 + rnd(-0.3, 0.3), z + rnd(-0.3, 0.3), rnd(-1.5, 1.5), rnd(1, 3.5), rnd(-1.5, 1.5), 1, rnd(0.3, 0.6), 0.08, rnd(0.25, 0.4));
+    } else {
+      pr.mesh.position.set(x, 0.62, z);
+      pr.mesh.rotation.y = headingAt(i0);
+      pr.mesh.userData.roll.rotation.x += (pr.speed * dt) / 0.6;
+      if (Math.random() < 0.5) emit(x, 0.2, z, rnd(-1, 1), rnd(0.5, 2), rnd(-1, 1), 0.4, 0.3, 0.18, 0.4, 2);
+    }
     let hit = false;
     for (const k of karts) {
       if ((k === pr.owner && pr.age < 1) || k.y > 1.2) continue;
-      if ((k.x - x) ** 2 + (k.z - z) ** 2 < 1.9 * 1.9) { hitKart(k, pr.owner); hit = true; break; }
+      if ((k.x - x) ** 2 + (k.z - z) ** 2 < (fire ? 2.1 : 1.9) ** 2) { hitKart(k, pr.owner); hit = true; break; }
     }
-    if (hit || pr.life <= 0) { if (!hit) burst(x, 0.6, z, 10, 0.6, 0.45, 0.3); scene.remove(pr.mesh); projectiles.splice(n, 1); }
+    if (hit || pr.life <= 0) {
+      if (fire) burst(x, 1, z, 16, 1, 0.45, 0.1);
+      else if (!hit) burst(x, 0.6, z, 10, 0.6, 0.45, 0.3);
+      scene.remove(pr.mesh); projectiles.splice(n, 1);
+    }
   }
 
   // ice-cream hazards
@@ -548,6 +603,7 @@ function frameUpdate(dt) {
   if (!paused) {
     const steps = dt > 1 / 50 ? 2 : 1;
     for (let s = 0; s < steps; s++) simulate(dt / steps);
+    updateHedgehogs(dt, camera.position);
     for (const k of karts) syncKart(k, state === 'menu' || state === 'countdown' ? 0 : dt);
     if (state === 'menu') player.v.head.rotation.y = Math.sin(gTime * 1.3) * 0.4;
     updateParticles(dt);
@@ -577,3 +633,4 @@ addEventListener('resize', resize);
 resize();
 camera.position.set(player.x + 10, 5, player.z + 10);
 requestAnimationFrame(loop);
+

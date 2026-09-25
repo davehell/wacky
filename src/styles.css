@@ -51,6 +51,21 @@ body {
 .slot svg { width: 64px; height: 64px; }
 .slot.rolling svg { animation: wobble 0.12s linear infinite; }
 @keyframes wobble { 50% { transform: scale(0.85) rotate(-8deg); } }
+.ammo {
+  position: relative; width: 72px; height: 72px; border-radius: 18px; background: var(--paper);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 4px solid #fff; box-shadow: 0 5px 0 var(--ink); display: grid; place-items: center;
+}
+.ammo svg { width: 48px; height: 48px; }
+.ammo.empty svg { opacity: 0.3; }
+.ammo b {
+  position: absolute; right: -10px; bottom: -10px; min-width: 32px; padding: 0 6px; box-sizing: border-box;
+  font: 400 18px/28px var(--display); text-align: center; color: var(--ink);
+  background: var(--sun); border: 3px solid var(--ink); border-radius: 99px;
+}
+.ammo.full b { background: var(--cherry); color: #fff; }
+.ammo.pop { animation: bump 0.25s ease-out; }
+@keyframes bump { 40% { transform: scale(1.15); } }
 .slot-label { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; text-align: center; margin-top: 8px; color: var(--ink); }
 .icon-btns { display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
 .icon-btn {
@@ -145,6 +160,8 @@ kbd { font: 700 11px var(--body); background: #fff; border: 1px solid var(--line
   width: 74px; height: 74px; border-radius: 50%; border: 3px solid #fff; background: rgba(20, 33, 61, 0.45); color: #fff;
   font: 800 12px var(--body); letter-spacing: 0.06em; text-transform: uppercase; display: grid; place-items: center;
 }
+.touch .grp--col { flex-direction: column; gap: 10px; }
+.tbtn--sm { width: 58px; height: 58px; font-size: 11px; letter-spacing: 0.02em; }
 .tbtn.on { background: rgba(255, 201, 60, 0.85); color: var(--ink); }
 .tbtn svg { width: 30px; height: 30px; }
 body.is-touch .hud__bl { bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
@@ -155,8 +172,11 @@ body.is-touch .hud__br { bottom: calc(110px + env(safe-area-inset-bottom, 0px));
   .panel--center { left: 16px; right: 16px; top: 50%; transform: translateY(-50%); }
   .slot { width: 72px; height: 72px; border-radius: 18px; }
   .slot svg { width: 46px; height: 46px; }
-  .touch .tbtn { width: 64px; height: 64px; }
+  .touch .tbtn { width: 60px; height: 60px; }
+  .touch .tbtn--sm { width: 52px; height: 52px; }
+  .ammo { width: 58px; height: 58px; border-radius: 15px; }
+  .ammo svg { width: 38px; height: 38px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .msg.pop, .cd.pop, .slot.rolling svg { animation: none; }
+  .msg.pop, .cd.pop, .slot.rolling svg, .ammo.pop { animation: none; }
 }
