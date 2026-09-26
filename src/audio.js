@@ -137,13 +137,6 @@ const sfx = {
     if (level === 1) { note(1319, 0, 0.18, 'triangle', 0.06); note(1760, 0.07, 0.25, 'triangle', 0.05); }
     else { note(1568, 0, 0.16, 'triangle', 0.07); note(2093, 0.06, 0.16, 'triangle', 0.06); note(2637, 0.12, 0.3, 'triangle', 0.05); }
   },
-  // a driver's little voice: "yippee", "bye-bye", "oops" or "ouch", pitched to suit the animal
-  voice: (kind, p = 1) => {
-    if (kind === 'cheer') { note(660 * p, 0, 0.12, 'triangle', 0.06, 880 * p); note(880 * p, 0.12, 0.22, 'triangle', 0.06, 1320 * p); }
-    else if (kind === 'bye') { note(784 * p, 0, 0.15, 'triangle', 0.05, 740 * p); note(587 * p, 0.2, 0.24, 'triangle', 0.05, 554 * p); }
-    else if (kind === 'oops') note(740 * p, 0, 0.32, 'triangle', 0.06, 370 * p);
-    else { note(900 * p, 0, 0.1, 'sine', 0.06, 1200 * p); note(1100 * p, 0.08, 0.14, 'sine', 0.05, 700 * p); }
-  },
   // the podium: soft applause and cheering, with a little fanfare when the player is on it
   cheer: (fanfare) => {
     for (let i = 0; i < 70; i++) whoosh(Math.random() * 2.6, 0.04, 'bandpass', 1800 + Math.random() * 1200, 1400, 0.025 + Math.random() * 0.02, 1.5);

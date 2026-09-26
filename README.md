@@ -27,8 +27,7 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
   se vyplatí hlavně s turbem
 - pohár: všechny tři tratě za sebou, body za umístění (10, 8, 6, 4, 2, 1) a zlatý, stříbrný
   nebo bronzový pohár na konci
-- jezdci reagují: po zásahu jim kolem hlavy krouží hvězdičky, střelec zavolá „Jupí!“, soupeř,
-  který tě předjede, se ohlédne a zamává „Pa pa!“, a ten, koho předjedeš, řekne „Jejda!“
+- zasaženému jezdci chvíli krouží kolem hlavy hvězdičky
 - v cíli pódium pro první tři: každé zvíře slaví po svém, padají konfety a vítěz poháru dostane
   zlatý pohár
 - drift s turbem (modré a oranžové jiskry), raketový start

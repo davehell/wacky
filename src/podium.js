@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { rnd, col } from './util.js';
 import { scene, canvasTex, std, mesh } from './render.js';
 import { P, T, S } from './track.js';
-import { speechTexture } from './characters.js';
 
 /* ================= Podium ================= */
 // After the race the first three stand on the podium just past the finish line, facing the camera, and
@@ -114,18 +113,15 @@ function showPodium(order, cup) {
     k.v.root.position.set(wx, y, wz);
     k.v.root.rotation.set(0, h, 0);
     k.v.root.visible = true;
-    k.react = null; k.dizzy = 0;
+    k.dizzy = 0;
     k.v.stars.visible = false;
-    // the winner shouts for joy
-    k.v.say.visible = i === 0;
-    if (i === 0) { k.v.say.material.map = speechTexture('cheer'); k.v.say.material.opacity = 1; k.v.say.scale.set(2.6, 1.46, 1); }
     return { k, b: { x: wx, y, z: wz, h }, s: i < 3 ? 1 : 0.4, delay: i * 0.25 };
   });
   if (cup) trophy.position.set(0, BLOCKS[0].h + 4.2, 0);
 }
 function hidePodium() {
   root.visible = false;
-  for (const { k } of shown) { k.v.head.rotation.set(0, 0, 0); k.v.body.rotation.set(0, 0, 0); k.v.say.visible = false; }
+  for (const { k } of shown) { k.v.head.rotation.set(0, 0, 0); k.v.body.rotation.set(0, 0, 0); }
   shown = [];
 }
 const podiumOn = () => root.visible;

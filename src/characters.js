@@ -4,12 +4,12 @@ import { canvasTex, std, mesh, snapshots } from './render.js';
 
 /* ================= Characters & karts ================= */
 const CHARS = [
-  { id: 'shark', name: 'Žralok Žorž', skin: 0x4f86c6, kart: 0xfb5607, voice: 0.8 },
-  { id: 'giraffe', name: 'Žirafa Žofie', skin: 0xf6c453, kart: 0x06b6a4, shirt: 0xef476f, camUp: 5.1, camBack: 10.5, voice: 1.1 },
-  { id: 'deer', name: 'Jelen Jarda', skin: 0xb0703f, kart: 0x8338ec, shirt: 0x06b6a4, headTop: 0.9, voice: 0.95 },
-  { id: 'frog', name: 'Žabák Franta', skin: 0x5cbf4a, kart: 0xef476f, shirt: 0xf5f5f0, voice: 0.9 },
-  { id: 'bunny', name: 'Zajíček Bobek', skin: 0xf7f4ef, kart: 0x3a86ff, shirt: 0xffc93c, headTop: 1.3, voice: 1.3 },
-  { id: 'elephant', name: 'Slonice Ela', skin: 0xa7aecb, kart: 0xffc93c, shirt: 0x3a86ff, voice: 0.75 },
+  { id: 'shark', name: 'Žralok Žorž', skin: 0x4f86c6, kart: 0xfb5607 },
+  { id: 'giraffe', name: 'Žirafa Žofie', skin: 0xf6c453, kart: 0x06b6a4, shirt: 0xef476f, camUp: 5.1, camBack: 10.5 },
+  { id: 'deer', name: 'Jelen Jarda', skin: 0xb0703f, kart: 0x8338ec, shirt: 0x06b6a4 },
+  { id: 'frog', name: 'Žabák Franta', skin: 0x5cbf4a, kart: 0xef476f, shirt: 0xf5f5f0 },
+  { id: 'bunny', name: 'Zajíček Bobek', skin: 0xf7f4ef, kart: 0x3a86ff, shirt: 0xffc93c },
+  { id: 'elephant', name: 'Slonice Ela', skin: 0xa7aecb, kart: 0xffc93c, shirt: 0x3a86ff },
 ];
 
 const SPH = new THREE.SphereGeometry(1, 28, 20);
@@ -242,13 +242,12 @@ function makeKart(ch) {
   const driver = makeDriver(ch);
   body.add(driver.group);
   const head = driver.head;
-  const { stars, say } = makeReactions(driver.face, ch.headTop || 0);
-  return { root, body, wheels, pivots, head, stars, say };
+  const stars = makeStars(driver.face);
+  return { root, body, wheels, pivots, head, stars };
 }
 
-/* ---------- Reactions ---------- */
-// Dizzy stars circling above the head after a hit, and a speech bubble that pops up over the driver.
-// Both sit high enough to be seen from behind, where the camera is.
+/* ---------- Dizzy stars ---------- */
+// Dizzy stars circling above the head after a hit, high enough to be seen from behind, where the camera is
 const STAR_GEO = (() => {
   const sh = new THREE.Shape();
   for (let n = 0; n <= 10; n++) {
@@ -258,32 +257,7 @@ const STAR_GEO = (() => {
   return new THREE.ExtrudeGeometry(sh, { depth: 0.06, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 1 }).translate(0, 0, -0.03);
 })();
 const STAR_MAT = std(0xffd23f, { roughness: 0.3, emissive: col(0x8a6a00) });
-const SPEECH = {
-  cheer: { text: 'Jupí!', color: '#ffc93c' },
-  bye: { text: 'Pa pa!', color: '#3a86ff' },
-  oops: { text: 'Jejda!', color: '#ef476f' },
-  ouch: { text: 'Au!', color: '#8338ec' },
-};
-const speechTex = {};
-function speechTexture(kind) {
-  if (!speechTex[kind]) {
-    const b = SPEECH[kind];
-    speechTex[kind] = canvasTex(256, 144, (g, w, h) => {
-      g.clearRect(0, 0, w, h);
-      g.fillStyle = '#ffffff'; g.strokeStyle = b.color; g.lineWidth = 10;
-      g.beginPath();
-      g.moveTo(40, 10); g.lineTo(w - 40, 10); g.quadraticCurveTo(w - 8, 10, w - 8, 44); g.lineTo(w - 8, 72);
-      g.quadraticCurveTo(w - 8, 106, w - 40, 106); g.lineTo(w / 2 + 18, 106); g.lineTo(w / 2, 136); g.lineTo(w / 2 - 18, 106);
-      g.lineTo(40, 106); g.quadraticCurveTo(8, 106, 8, 72); g.lineTo(8, 44); g.quadraticCurveTo(8, 10, 40, 10); g.closePath();
-      g.fill(); g.stroke();
-      g.fillStyle = '#14213d'; g.font = '50px Bungee, Impact, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(b.text, w / 2, 60);
-    }, false, true);
-  }
-  return speechTex[kind];
-}
-// `above`: how much antlers or ears stick up, so the bubble clears them
-function makeReactions(face, above) {
+function makeStars(face) {
   const top = face.position.y + face.scale.y + 0.35;
   const stars = new THREE.Group();
   stars.position.set(face.position.x, top, face.position.z);
@@ -295,14 +269,7 @@ function makeReactions(face, above) {
   }
   stars.visible = false;
   face.parent.add(stars);
-  const say = new THREE.Sprite(new THREE.SpriteMaterial({ map: speechTexture('cheer'), transparent: true, depthWrite: false }));
-  say.scale.set(2.6, 1.46, 1);
-  say.center.set(0.5, 0);
-  say.position.set(face.position.x, top + 0.5 + above, face.position.z);
-  say.renderOrder = 3;
-  say.visible = false;
-  face.parent.add(say);
-  return { stars, say };
+  return stars;
 }
 
-export { CHARS, makeKart, makePortraits, speechTexture };
+export { CHARS, makeKart, makePortraits };
