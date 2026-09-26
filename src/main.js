@@ -17,6 +17,8 @@ const DRIFT_MINI = 0.5, DRIFT_BIG = 1.2;
 const ICE_FLIGHT = 0.9;
 // how long a bubble, a magnet and a rain shower last
 const BUBBLE_T = 10, MAGNET_T = 6, RAIN_T = 4;
+// how long a reaction (a voice and a head gesture) lasts, and how often a driver may react
+const REACT_T = 1.6, REACT_GAP = 2.5, PASS_GAP = 6;
 const AI_MAX_HOGS = 3, AI_SHOT_GAP = 4.5, SAFE_AFTER_HIT = 2.2;
 const CC = [
   { base: 30, ai: 0.9, label: '50 cc', in: 'v 50 cc' },
@@ -51,7 +53,7 @@ function resetKart(k, slot) {
     x: P[i].x + S[i].x * lat, z: P[i].z + S[i].z * lat, y: 0, hopV: 0,
     h: headingAt(i), speed: 0, vx: 0, vz: 0, st: 0,
     drifting: false, air: false, rampH: 0, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
-    item: null, bubble: 0, magnet: 0, rain: 0, dizzy: 0, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, shake: 0, crashCd: 0, pushX: 0, pushZ: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
+    item: null, bubble: 0, magnet: 0, rain: 0, react: null, reactT: 0, reactCd: 0, passCd: 0, dizzy: 0, aheadP: null, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, shake: 0, crashCd: 0, pushX: 0, pushZ: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
   });
   // a touch slower than the player at the top speed, each with its own comfortable gap
   k.ai.skill = CC[cls()].ai * rnd(0.93, 0.97);
@@ -83,6 +85,15 @@ function syncKart(k, dt) {
   v.body.position.set(Math.sin(gTime * 57) * 0.14 * sh, Math.abs(Math.sin(gTime * 41)) * 0.1 * sh, 0);
   v.body.rotation.x = Math.sin(gTime * 47) * 0.09 * sh;
   v.head.rotation.set(0, -k.st * 0.25, k.st * 0.18);
+  // a reaction: the head cheers, looks back or shakes
+  if (k.react) {
+    const t = (k.reactT += dt), e = Math.sin(clamp(t / REACT_T, 0, 1) * Math.PI);
+    if (k.react === 'cheer') v.head.rotation.x = Math.sin(t * 18) * 0.2 * e;
+    else if (k.react === 'bye') v.head.rotation.y += k.lookSide * 1.1 * e;
+    else if (k.react === 'oops') v.head.rotation.y += Math.sin(t * 22) * 0.35 * e;
+    else v.head.rotation.z += Math.sin(t * 16) * 0.3 * e;
+    if (t >= REACT_T) k.react = null;
+  }
   // dizzy after a hit: stars circle the head and it wobbles
   v.stars.visible = k.dizzy > 0;
   if (k.dizzy > 0) { k.dizzy -= dt; v.stars.rotation.y += dt * 6; v.head.rotation.z += Math.sin(gTime * 7) * 0.25; }
@@ -351,6 +362,14 @@ function crash(k, s, x, z) {
 }
 
 // kind: 'hog', 'fire' or 'ice'
+// kind: 'cheer', 'bye', 'oops' or 'ouch'; heard only near the player
+function react(k, kind) {
+  if (k.reactCd > 0 || k.finished) return;
+  k.react = kind; k.reactT = 0; k.reactCd = REACT_GAP;
+  // which way to look back: towards the player
+  k.lookSide = Math.sign((player.x - k.x) * Math.cos(k.h) - (player.z - k.z) * Math.sin(k.h)) || 1;
+  if (Math.hypot(k.x - player.x, k.z - player.z) < 35) sfx.voice(kind, k.ch.voice);
+}
 function hitKart(k, by, kind) {
   if (k.spin > 0 || k.safe > 0) return;
   if (k.bubble > 0) { popBubble(k); if (k.isPlayer) showMsg('Bublina tě ochránila!', 1.1); return; }
@@ -358,6 +377,8 @@ function hitKart(k, by, kind) {
   if (k.isPlayer) k.safe = k.spin + SAFE_AFTER_HIT;
   burst(k.x, 1.2, k.z, 26, 1, 0.85, 0.2);
   k.dizzy = k.spin + 1.2;
+  if (!k.isPlayer) react(k, 'ouch');
+  if (by && by !== k) react(by, 'cheer');
   if (k.isPlayer) {
     showMsg('Au!'); sfx.hit(); sfx.hitBy(kind); sfx.dizzy();
     // the whole picture wobbles, the screen edges flash and a tablet gives a little buzz
@@ -834,6 +855,8 @@ function simulate(dt) {
       }
     } else inp = aiInput(k, dt);
     if (k.hogCd > 0) k.hogCd -= dt;
+    if (k.reactCd > 0) k.reactCd -= dt;
+    if (k.passCd > 0) k.passCd -= dt;
     if (k.bubble > 0) k.bubble -= dt;
     if (k.magnet > 0) { k.magnet -= dt; pullHedgehogs(k, dt); }
     if (k.safe > 0) k.safe -= dt;
@@ -854,6 +877,16 @@ function simulate(dt) {
     }
   }
   firePressed = false;
+
+  // an opponent that overtakes the player waves "bye", one the player overtakes says "oops"
+  if (!player.finished) {
+    for (const k of karts) {
+      if (k === player || k.finished) continue;
+      const ahead = k.prog > player.prog;
+      if (k.aheadP !== null && ahead !== k.aheadP && k.passCd <= 0 && Math.abs(k.prog - player.prog) < 20) { react(k, ahead ? 'bye' : 'oops'); k.passCd = PASS_GAP; }
+      k.aheadP = ahead;
+    }
+  }
 
   // kart-to-kart bumps
   for (let a = 0; a < karts.length; a++) for (let b = a + 1; b < karts.length; b++) {
@@ -990,6 +1023,8 @@ function simulate(dt) {
         else {
           c.rain = RAIN_T; tg.rain = RAIN_T;
           if (tg.isPlayer) { showMsg('Prší!', 1.1); sfx.drizzle(); } else if (c.owner.isPlayer) { showMsg('Ať zmokne!', 1); sfx.score(); }
+          if (!tg.isPlayer) react(tg, 'oops');
+          react(c.owner, 'cheer');
         }
       }
     } else if (c.rain > 0) {

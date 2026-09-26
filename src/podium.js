@@ -113,7 +113,7 @@ function showPodium(order, cup) {
     k.v.root.position.set(wx, y, wz);
     k.v.root.rotation.set(0, h, 0);
     k.v.root.visible = true;
-    k.dizzy = 0;
+    k.react = null; k.dizzy = 0;
     k.v.stars.visible = false;
     return { k, b: { x: wx, y, z: wz, h }, s: i < 3 ? 1 : 0.4, delay: i * 0.25 };
   });
