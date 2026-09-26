@@ -33,6 +33,7 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
   a zakolébá, okraje obrazovky zablikají, zacinkají hvězdičky a tablet krátce zavibruje
 - v cíli pódium pro první tři: každé zvíře slaví po svém, padají konfety a vítěz poháru dostane
   zlatý pohár
+- v posledním kole zamává uprostřed obrazovky šachovnicová vlajka (hra se obejde bez čtení)
 - drift s turbem (modré a oranžové jiskry), raketový start
 - ježci na trati jako v původní hře: přejetím je sebereš (až 10) a pak je házíš — kutálí se za soupeřem
   před tebou; každý ježek zrovna něco dělá (sedí na záchodě, čte noviny, spí, hraje na kytaru…)

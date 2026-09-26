@@ -510,7 +510,15 @@ let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1, lastDrift = 0;
   $('#hogIcon').innerHTML = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
 }
 function showMsg(t, dur = 1.3) { el.msg.textContent = t; el.msg.classList.remove('pop'); void el.msg.offsetWidth; el.msg.classList.add('pop'); el.msg.hidden = false; msgTimer = dur; }
-const itemPop = $('#itemPop'), hitFlash = $('#hitFlash');
+const itemPop = $('#itemPop'), hitFlash = $('#hitFlash'), flag = $('#flag');
+let flagTimer = 0;
+// the last lap: children cannot read yet, so a waving chequered flag says it instead of words
+function waveFlag() {
+  flag.hidden = true; void flag.offsetWidth; flag.hidden = false;
+  clearTimeout(flagTimer);
+  flagTimer = setTimeout(() => { flag.hidden = true; }, 2600);
+  sfx.lastLap();
+}
 let itemPopTimer = 0;
 function showItemPop(it) {
   $('#itemPopIcon').innerHTML = ICONS[it];
@@ -714,7 +722,7 @@ function startRace() {
   state = 'countdown'; paused = false;
   camH = player.h; camHit = 0;
   lastHud = {}; lastSlot = '-'; lastHogs = -1; lastDrift = 0;
-  el.msg.hidden = true; el.cd.hidden = true; itemPop.hidden = true;
+  el.msg.hidden = true; el.cd.hidden = true; itemPop.hidden = true; flag.hidden = true;
   show('#menu', false); show('#results', false); show('#pause', false); show('#hud', true); show('#touch', isTouch);
   requestAnimationFrame(setupMini);
 }
@@ -864,7 +872,7 @@ function simulate(dt) {
     if (k.shake > 0) k.shake = Math.max(0, k.shake - dt * 2.5);
     const lapBefore = k.lap;
     stepKart(k, inp, dt);
-    if (k.isPlayer && k.lap > lapBefore && k.lap < LAPS && k.lap > 0) showMsg(k.lap === LAPS - 1 ? 'Poslední kolo!' : `Kolo ${k.lap + 1}`);
+    if (k.isPlayer && k.lap > lapBefore && k.lap === LAPS - 1) waveFlag();
     if (!k.finished && k.lap >= LAPS) {
       k.finished = true; k.finishTime = raceTime; k.place = ++finishCount;
       if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); silenceEngine(0.4); }

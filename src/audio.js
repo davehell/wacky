@@ -143,6 +143,11 @@ const sfx = {
     [1568, 2093, 1760, 2349, 1976, 2637].forEach((f, i) => note(f, 0.25 + i * 0.22, 0.2, 'sine', 0.045 * vol, i % 2 ? f * 0.8 : f * 1.2));
     note(523, 0.2, 0.9, 'triangle', 0.04 * vol, 392);
   },
+  // the last lap: the flag flaps and a bright little "ta-da-daa" rings out
+  lastLap: () => {
+    for (let i = 0; i < 4; i++) whoosh(i * 0.12, 0.1, 'bandpass', 1400, 700, 0.05, 1.5);
+    [784, 988, 1175].forEach((f, i) => note(f, 0.1 + i * 0.13, i === 2 ? 0.5 : 0.14, 'triangle', 0.09));
+  },
   score: () => { note(620, 0, 0.14, 'sine', 0.13, 310); note(988, 0.12, 0.12, 'triangle', 0.06); note(1319, 0.2, 0.2, 'triangle', 0.06); },
   // the extra layer on top of `hit` telling what it was
   hitBy: (kind) => {
