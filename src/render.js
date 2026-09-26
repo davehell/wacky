@@ -62,4 +62,32 @@ function std(hex, opts) {
 }
 function mesh(geo, mat) { const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; return m; }
 
-export { stage, renderer, MAX_ANISO, scene, camera, sky, sun, canvasTex, std, mesh };
+// Renders small pictures of models for the menu and the HUD. `frame(obj)` returns the point to look at,
+// the radius that has to fit into the picture and the direction the camera looks from.
+function snapshots(objects, frame, size = 192) {
+  let r = null;
+  try {
+    r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    r.setPixelRatio(1); r.setSize(size, size); r.outputEncoding = THREE.sRGBEncoding;
+    const sc = new THREE.Scene();
+    sc.add(new THREE.HemisphereLight(col(0xffffff), col(0x8890aa), 0.9));
+    const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(3, 5, 6); sc.add(dl);
+    const cam = new THREE.PerspectiveCamera(26, 1, 0.1, 60);
+    return objects.map((obj) => {
+      sc.add(obj);
+      obj.updateMatrixWorld(true);
+      const { center, radius, dir } = frame(obj);
+      cam.position.copy(center).addScaledVector(dir.normalize(), radius / Math.sin((13 * Math.PI) / 180));
+      cam.lookAt(center);
+      r.render(sc, cam);
+      sc.remove(obj);
+      return r.domElement.toDataURL('image/png');
+    });
+  } catch (e) {
+    return [];
+  } finally {
+    if (r) { r.dispose(); if (r.forceContextLoss) r.forceContextLoss(); }
+  }
+}
+
+export { stage, renderer, MAX_ANISO, scene, camera, sky, sun, canvasTex, std, mesh, snapshots };

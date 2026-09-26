@@ -3,29 +3,34 @@ import { $, clamp, rnd, wrapA, store, hex } from './util.js';
 import { stage, renderer, scene, camera, sky, sun } from './render.js';
 import { N, W, LIM, LAPS, P, T, S, SEG, headingAt, nearest, clouds } from './track.js';
 import { CHARS, makeKart, makePortraits } from './characters.js';
-import { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, makeIceCream } from './items.js';
-import { MAX_HOGS, hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs } from './hedgehogs.js';
+import { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, animateFireball, makeIceCream } from './items.js';
+import { MAX_HOGS, hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
 import { parts, emit, updateParticles, burst } from './particles.js';
-import { initAudio, sfx, setEngine, updateOpponents, silenceEngine, toggleMute } from './audio.js';
+import { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
 /* ================= Game state ================= */
+// Opponents carry only a few hedgehogs and take turns at the player, so a leader is never pelted non-stop
+// Drift charge levels for the small and the big turbo, reachable within one ordinary bend
+const DRIFT_MINI = 0.5, DRIFT_BIG = 1.2;
+const ICE_FLIGHT = 0.9;
+const AI_MAX_HOGS = 3, AI_SHOT_GAP = 4.5, SAFE_AFTER_HIT = 2.2;
 const CC = [
   { base: 30, ai: 0.9, label: '50 cc', in: 'v 50 cc' },
   { base: 36, ai: 0.96, label: '100 cc', in: 've 100 cc' },
   { base: 43, ai: 1.0, label: '150 cc', in: 've 150 cc' },
   // kids' mode: automatic throttle, gentle steering, slow and forgiving opponents
-  { base: 28, ai: 0.86, label: 'Dětský režim', in: 'v dětském režimu' },
+  { base: 28, ai: 0.92, label: 'Dětský režim', in: 'v dětském režimu' },
 ];
 let ccIdx = 1, selected = 0, kid = store.get('dk-kid') === '1';
 const cls = () => (kid ? 3 : ccIdx);
 let state = 'menu', paused = false, raceTime = 0, cdT = 0, cdShown = null, finishCount = 0, doneT = 0, gTime = 0;
-let player = null, launchAt = null;
+let player = null, launchAt = null, aiShotT = 0;
 const projectiles = [], hazards = [];
 
 const karts = CHARS.map((ch) => {
   const v = makeKart(ch);
   scene.add(v.root);
-  return { ch, v, stats: ch.stats, ai: { t: 0, phase: rnd(0, 6.28), freq: rnd(0.25, 0.45), itemT: 0, hogT: 0, skill: 1 } };
+  return { ch, v, ai: { t: 0, phase: rnd(0, 6.28), freq: rnd(0.25, 0.45), itemT: 0, hogT: 0, skill: 1 } };
 });
 
 function resetKart(k, slot) {
@@ -37,11 +42,14 @@ function resetKart(k, slot) {
     x: P[i].x + S[i].x * lat, z: P[i].z + S[i].z * lat, y: 0, hopV: 0,
     h: headingAt(i), speed: 0, vx: 0, vz: 0, st: 0,
     drifting: false, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
-    item: null, pending: null, rollT: 0, hogs: 1, hogCd: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
+    item: null, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, shake: 0, crashCd: 0, pushX: 0, pushZ: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
   });
-  k.ai.skill = CC[cls()].ai * rnd(0.96, 1.02);
+  // a touch slower than the player at the top speed, each with its own comfortable gap
+  k.ai.skill = CC[cls()].ai * rnd(0.93, 0.97);
+  k.ai.slack = 12 + slot * 6;
+  k.ai.surgeF = rnd(0.2, 0.32); k.ai.surgeP = rnd(0, 6.28);
   k.ai.itemT = 0;
-  k.ai.hogT = rnd(4, 8);
+  k.ai.hogT = rnd(8, 12);
   k.kid = false;
   syncKart(k, 0);
 }
@@ -50,7 +58,7 @@ function placeGrid() {
   order.splice(4, 0, karts.find((k) => k.ch === CHARS[selected]));
   order.forEach((k, slot) => resetKart(k, slot));
   player = karts.find((k) => k.ch === CHARS[selected]);
-  player.hogs = 3;
+  player.maxHogs = MAX_HOGS;
   player.kid = kid;
   karts.forEach((k) => (k.isPlayer = k === player));
 }
@@ -61,15 +69,21 @@ function syncKart(k, dt) {
   v.root.rotation.y = k.h - (k.drifting ? k.driftDir * 0.28 : 0);
   const sf = clamp(Math.abs(k.speed) / 30, 0, 1);
   v.body.rotation.z += ((k.drifting ? k.driftDir : k.st) * 0.07 * sf - v.body.rotation.z) * Math.min(1, dt * 8);
+  // rattle after a crash or a hit
+  const sh = k.shake * k.shake;
+  v.body.position.set(Math.sin(gTime * 57) * 0.14 * sh, Math.abs(Math.sin(gTime * 41)) * 0.1 * sh, 0);
+  v.body.rotation.x = Math.sin(gTime * 47) * 0.09 * sh;
   v.head.rotation.z = k.st * 0.18;
   v.head.rotation.y = -k.st * 0.25;
+  // blinking while protected after a hit
+  v.root.visible = !(k.safe > 0 && k.spin <= 0 && Math.floor(k.safe * 10) % 2);
   for (const w of v.wheels) w.rotation.x += (k.speed * dt) / 0.48;
   for (const p of v.pivots) p.rotation.y = -k.st * 0.45;
 }
 
 /* ================= Input ================= */
 const keys = new Set();
-const touch = { left: false, right: false, brake: false, drift: false };
+const touch = { left: false, right: false, drift: false, pad: 0 };
 let firePressed = false, padFirePrev = false;
 const isTouch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
 if (isTouch) document.body.classList.add('is-touch');
@@ -96,6 +110,32 @@ document.querySelectorAll('.tbtn').forEach((b) => {
   b.addEventListener('pointerleave', off);
 });
 
+// Kids' touch pad: the finger's first touch is the centre, sliding it sideways steers, the further the harder
+{
+  const pad = $('#tpad'), knob = $('#tpadKnob'), REACH = 60;
+  let id = null, x0 = 0, knobX = 0;
+  const move = (e) => {
+    const dx = clamp(e.clientX - x0, -REACH, REACH);
+    touch.pad = Math.abs(dx) < 6 ? 0 : dx / REACH;
+    knob.style.transform = `translateX(${knobX + dx}px)`;
+  };
+  pad.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (id !== null) return;
+    id = e.pointerId; x0 = e.clientX; pad.setPointerCapture(id);
+    const r = pad.getBoundingClientRect();
+    knobX = e.clientX - (r.left + r.width / 2);
+    pad.classList.add('on'); move(e);
+  });
+  pad.addEventListener('pointermove', (e) => { if (e.pointerId === id) move(e); });
+  const end = (e) => {
+    if (e.pointerId !== id) return;
+    id = null; touch.pad = 0; pad.classList.remove('on');
+  };
+  pad.addEventListener('pointerup', end);
+  pad.addEventListener('pointercancel', end);
+}
+
 function readPad() {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   for (const p of pads) if (p && p.connected) return p;
@@ -108,9 +148,9 @@ function playerInput() {
   let brake = has('ArrowDown', 'KeyS');
   let drift = has('ShiftLeft', 'ShiftRight');
   if (isTouch) {
-    steer += (touch.right ? 1 : 0) - (touch.left ? 1 : 0);
-    brake = brake || touch.brake;
-    throttle = throttle || !touch.brake;
+    steer += (touch.right ? 1 : 0) - (touch.left ? 1 : 0) + touch.pad;
+    // on a touch screen the kart always goes full throttle
+    throttle = true;
     drift = drift || touch.drift;
   }
   const pad = readPad();
@@ -139,16 +179,16 @@ const NOINPUT = { steer: 0, throttle: false, brake: false, drift: false };
 
 /* ================= Kart physics ================= */
 function stepKart(k, inp, dt) {
-  const s = k.stats, base = CC[cls()].base;
+  const base = CC[cls()].base;
   if (k.spin > 0) { k.spin -= dt; k.h += dt * 11 * k.spinDir; k.speed *= Math.pow(0.12, dt); k.drifting = false; inp = NOINPUT; }
   // kids get a slow, smooth wheel so a tap on a key never jerks the kart
   k.st += (inp.steer - k.st) * Math.min(1, dt * (k.kid ? 3 : 10));
   k.thr = inp.throttle;
   const off = Math.abs(k.lat) > W + 1.2;
-  let maxS = base * s.speed * k.mul;
+  let maxS = base * k.mul;
   if (off) maxS *= 0.48;
-  if (k.boost > 0) { k.boost -= dt; maxS = Math.max(maxS, base * s.speed * 1.38); k.speed += 55 * dt; }
-  else if (inp.throttle && k.speed < maxS) k.speed += 25 * s.accel * dt * (1 - 0.55 * Math.max(0, k.speed) / maxS);
+  if (k.boost > 0) { k.boost -= dt; maxS = Math.max(maxS, base * 1.38); k.speed += 55 * dt; }
+  else if (inp.throttle && k.speed < maxS) k.speed += 25 * dt * (1 - 0.55 * Math.max(0, k.speed) / maxS);
   if (inp.brake) { k.speed -= (k.speed > 0 ? 45 : 14) * dt; if (k.speed < -11) k.speed = -11; }
   if (!inp.throttle && !inp.brake && k.boost <= 0) k.speed -= Math.sign(k.speed) * Math.min(Math.abs(k.speed), 9 * dt);
   if (k.speed > maxS) k.speed -= (k.speed - maxS) * Math.min(1, 2.5 * dt);
@@ -158,18 +198,18 @@ function stepKart(k, inp, dt) {
     k.drifting = true; k.driftDir = Math.sign(k.st); k.driftCharge = 0; k.hopV = 4.5;
   }
   if (k.drifting && (!inp.drift || k.speed < 8)) {
-    if (k.driftCharge > 1.8) k.boost = Math.max(k.boost, 1.15);
-    else if (k.driftCharge > 0.8) k.boost = Math.max(k.boost, 0.55);
-    if (k.isPlayer && k.driftCharge > 0.8) sfx.boost();
+    if (k.driftCharge > DRIFT_BIG) k.boost = Math.max(k.boost, 1.2);
+    else if (k.driftCharge > DRIFT_MINI) k.boost = Math.max(k.boost, 0.65);
+    if (k.isPlayer && k.driftCharge > DRIFT_MINI) { sfx.boost(); showMsg(k.driftCharge > DRIFT_BIG ? 'Super turbo!' : 'Turbo!', 0.8); }
     k.drifting = false;
   }
   const sf = clamp(Math.abs(k.speed) / 7, 0, 1) * (k.speed < 0 ? -1 : 1);
   let yaw;
   if (k.drifting) {
     const into = k.st * k.driftDir;
-    yaw = k.driftDir * (1.3 + 0.75 * into) * s.handling;
-    if (!off) k.driftCharge += dt * (0.7 + 0.5 * Math.max(0, into));
-  } else yaw = k.st * 2.0 * s.handling * (k.kid ? 0.8 : 1);
+    yaw = k.driftDir * (1.3 + 0.75 * into);
+    if (!off) k.driftCharge += dt * (1.5 + 0.6 * Math.max(0, into));
+  } else yaw = k.st * 2.0 * (k.kid ? 0.8 : 1);
   k.h -= yaw * sf * dt;
 
   const fx = Math.sin(k.h), fz = Math.cos(k.h);
@@ -178,6 +218,13 @@ function stepKart(k, inp, dt) {
   k.vx += (fx * k.speed - k.vx) * g;
   k.vz += (fz * k.speed - k.vz) * g;
   k.x += k.vx * dt; k.z += k.vz * dt;
+  // a shove from a collision that dies away on its own, independent of the grip
+  if (k.pushX || k.pushZ) {
+    k.x += k.pushX * dt; k.z += k.pushZ * dt;
+    const f = Math.exp(-5 * dt);
+    k.pushX *= f; k.pushZ *= f;
+    if (Math.abs(k.pushX) + Math.abs(k.pushZ) < 0.05) k.pushX = k.pushZ = 0;
+  }
   if (k.hopV || k.y > 0) { k.y += k.hopV * dt; k.hopV -= 24 * dt; if (k.y <= 0) { k.y = 0; k.hopV = 0; } }
 
   const i = nearest(k.x, k.z, k.idx), p = P[i], sd = S[i];
@@ -185,6 +232,8 @@ function stepKart(k, inp, dt) {
   if (Math.abs(lat) > LIM) {
     const c = Math.sign(lat) * LIM;
     k.x += sd.x * (c - lat); k.z += sd.z * (c - lat); lat = c;
+    const impact = Math.abs(k.vx * sd.x + k.vz * sd.z);
+    if (impact > 6 && k.crashCd <= 0) crash(k, clamp(impact / 25, 0.3, 1), k.x + sd.x * Math.sign(c) * 1.2, k.z + sd.z * Math.sign(c) * 1.2);
     k.speed *= 0.55; k.vx *= 0.4; k.vz *= 0.4;
   }
   k.lat = lat;
@@ -196,19 +245,86 @@ function stepKart(k, inp, dt) {
   // effects
   const rx = k.x - fx * 1.3, rz = k.z - fz * 1.3;
   if (k.drifting && Math.random() < 0.9) {
-    const c = k.driftCharge > 1.8 ? [1, 0.5, 0.12] : k.driftCharge > 0.8 ? [0.3, 0.65, 1] : [0.5, 0.5, 0.5];
+    const c = k.driftCharge > DRIFT_BIG ? [1, 0.5, 0.12] : k.driftCharge > DRIFT_MINI ? [0.3, 0.65, 1] : [0.5, 0.5, 0.5];
     for (const sgn of [-1, 1]) emit(rx + fz * sgn * 1.05, 0.3, rz - fx * sgn * 1.05, rnd(-2, 2), rnd(1, 4), rnd(-2, 2), c[0], c[1], c[2], 0.35, 12);
   }
   if (k.boost > 0) emit(k.x - fx * 1.9, 0.75 + k.y, k.z - fz * 1.9, -fx * 8 + rnd(-1, 1), rnd(0, 2), -fz * 8 + rnd(-1, 1), 1, rnd(0.35, 0.6), 0.1, 0.25);
   if (off && Math.abs(k.speed) > 8 && Math.random() < 0.6) emit(rx, 0.4, rz, rnd(-1.5, 1.5), rnd(1, 3), rnd(-1.5, 1.5), 0.32, 0.27, 0.16, 0.6, 2);
 }
 
-function hitKart(k, by) {
-  if (k.spin > 0) return;
-  k.spin = 1.1; k.spinDir = Math.random() < 0.5 ? -1 : 1; k.drifting = false; k.boost = 0;
+// Rubber band: a player who drives well pulls ahead but only by a short lead, and after a stop the field
+// slows down so the player catches up quickly. Distances are in metres along the road.
+function paceMul(k) {
+  if (k.finished) return 1;
+  if (k.isPlayer) {
+    let lead = 0;
+    for (const o of karts) if (o !== k && !o.finished) lead = Math.max(lead, (o.prog - k.prog) * SEG);
+    return 1 + clamp((lead - 25) / 250, 0, 0.15);
+  }
+  const gap = (player.prog - k.prog) * SEG;
+  if (player.finished) return k.ai.skill;
+  // kids' mode: the steady auto-throttle would keep everyone just behind, so each opponent has
+  // slow waves of pace that now and then carry it past the player and then drop it back again
+  const skill = k.ai.skill + (kid ? Math.sin(raceTime * k.ai.surgeF + k.ai.surgeP) * 0.08 : 0);
+  // behind the player: easy-going at first so a lead is possible, then pressing harder and harder
+  if (gap > 0) return skill + clamp((gap - k.ai.slack) / 90, 0, 0.45);
+  // ahead of the player: wait up
+  return skill - clamp((-gap - 12) / 120, 0, 0.5);
+}
+
+// Kids' mode: a kart that wanders far off the road, or turns round the wrong way, is put back
+// in the middle of the road after a moment, with a puff of cloud
+function rescueKid(k, dt) {
+  const lost = Math.abs(k.lat) > W + 6 || k.wrongT > 1.5;
+  k.lostT = lost && k.spin <= 0 ? (k.lostT || 0) + dt : 0;
+  if (k.lostT < 1.2) return;
+  burst(k.x, 1.2, k.z, 24, 1, 1, 1);
+  const i = k.idx, lat = clamp(k.lat, -W * 0.3, W * 0.3);
+  Object.assign(k, {
+    x: P[i].x + S[i].x * lat, z: P[i].z + S[i].z * lat, lat, h: headingAt(i),
+    speed: Math.max(k.speed, 14) * 0.6, y: 0.8, hopV: 3, drifting: false, lostT: 0, wrongT: 0, safe: 1.5, pushX: 0, pushZ: 0,
+  });
+  k.vx = Math.sin(k.h) * k.speed; k.vz = Math.cos(k.h) * k.speed;
+  if (k.isPlayer) { camH = k.h; showMsg('Zpátky na trať!', 1); sfx.pickup(); }
+  burst(k.x, 1.2, k.z, 24, 1, 1, 1);
+}
+
+// Two karts knock into each other: both are shoved apart, turned away and bounced up a little.
+// n points from A to B, v is the closing speed.
+function bump(A, B, nx, nz, v) {
+  const s = clamp(v / 12, 0.35, 1), shove = 5 + 9 * s, kick = 0.1 + 0.14 * s;
+  for (const [k, sx, sz] of [[A, -nx, -nz], [B, nx, nz]]) {
+    k.pushX += sx * shove; k.pushZ += sz * shove;
+    // turn away from the other kart (the push points away from it); increasing h turns left
+    const leftX = Math.cos(k.h), leftZ = -Math.sin(k.h);
+    k.h += Math.sign(sx * leftX + sz * leftZ) * kick;
+    if (k.y <= 0.001) k.hopV = 2.5 + 2 * s;
+    k.shake = Math.max(k.shake, 0.45 + 0.45 * s); k.crashCd = 0.35;
+  }
+  const x = (A.x + B.x) / 2, z = (A.z + B.z) / 2;
+  burst(x, 0.8, z, Math.round(10 + 12 * s), 1, 0.8, 0.35);
+  for (let n = 0; n < 6; n++) emit(x, 1.4, z, rnd(-4, 4), rnd(3, 6), rnd(-4, 4), 1, 1, 0.55, 0.6, 10);
+  if (A.isPlayer || B.isPlayer) sfx.bump(s);
+}
+
+// a kart that slams into the tyre wall: sparks, a thud, a bounce back and a good shake
+function crash(k, s, x, z) {
+  k.crashCd = 0.5; k.shake = Math.max(k.shake, 0.5 + 0.5 * s);
+  const ax = k.x - x, az = k.z - z, al = Math.hypot(ax, az) || 1;
+  k.pushX += (ax / al) * (4 + 8 * s); k.pushZ += (az / al) * (4 + 8 * s);
+  burst(x, 0.7, z, Math.round(8 + 14 * s), 1, 0.75, 0.35);
+  for (let n = 0; n < 8; n++) emit(x, 0.4, z, rnd(-3, 3), rnd(1, 3), rnd(-3, 3), 0.45, 0.4, 0.33, 0.7, 3);
+  if (k.isPlayer) sfx.crash(s);
+}
+
+// kind: 'hog', 'fire' or 'ice'
+function hitKart(k, by, kind) {
+  if (k.spin > 0 || k.safe > 0) return;
+  k.spin = 1.1; k.spinDir = Math.random() < 0.5 ? -1 : 1; k.drifting = false; k.boost = 0; k.shake = 1;
+  if (k.isPlayer) k.safe = k.spin + SAFE_AFTER_HIT;
   burst(k.x, 1.2, k.z, 26, 1, 0.85, 0.2);
-  if (k.isPlayer) { showMsg('Au!'); sfx.hit(); }
-  else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.hit(); }
+  if (k.isPlayer) { showMsg('Au!'); sfx.hit(); sfx.hitBy(kind); }
+  else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); }
 }
 
 function targetAhead(k) {
@@ -229,25 +345,26 @@ function useItem(k) {
     if (k.isPlayer) sfx.fire();
   }
   if (it === 'icecream') {
-    const fx = Math.sin(k.h), fz = Math.cos(k.h);
+    // lobbed in a high arc onto the road ahead, where everyone can see it land
     const m = makeIceCream();
-    const x = k.x - fx * 3.2, z = k.z - fz * 3.2;
-    m.position.set(x, 0, z); m.rotation.y = rnd(0, 6);
-    hazards.push({ x, z, life: 30, m });
-    if (k.isPlayer) sfx.throw();
+    m.scale.setScalar(1.5);
+    m.userData.splat.visible = false;
+    projectiles.push({ kind: 'ice', idx: (k.idx + 2) % N, f: 0, lat: k.lat, speed: Math.max(46, k.speed + 20), owner: k, life: ICE_FLIGHT, age: 0, target: null, mesh: m });
+    if (k.isPlayer) sfx.throwIce();
   }
 }
 function throwHog(k) {
   if (k.hogs <= 0 || k.hogCd > 0 || k.spin > 0) return;
   k.hogs--; k.hogCd = 0.3;
   projectiles.push({ kind: 'hog', idx: (k.idx + 2) % N, f: 0, lat: k.lat, speed: Math.max(58, k.speed + 24), owner: k, life: 5, age: 0, target: targetAhead(k), mesh: makeHog() });
-  if (k.isPlayer) sfx.throw();
+  if (k.isPlayer) sfx.throwHog();
 }
 function rollItem(k) {
   const rank = karts.filter((o) => o.prog > k.prog).length + 1;
-  const pT = 0.08 + 0.09 * (rank - 1), pH = 0.46;
+  // turbo is common, and more so the further back the kart is; the rest splits evenly
+  const pT = 0.34 + 0.07 * (rank - 1);
   const r = Math.random();
-  return r < pT ? 'turbo' : r < pT + pH ? 'fire' : 'icecream';
+  return r < pT ? 'turbo' : r < pT + (1 - pT) / 2 ? 'fire' : 'icecream';
 }
 
 function aiInput(k, dt) {
@@ -262,10 +379,17 @@ function aiInput(k, dt) {
   const bend = Math.acos(clamp(T[k.idx].x * T[ahead].x + T[k.idx].z * T[ahead].z, -1, 1));
   if (bend > 0.85 && k.speed > CC[cls()].base * 0.78) inp.throttle = false;
   if (Math.abs(diff) > 0.9 && k.speed > 12) inp.brake = true;
+  // the player is a target only when nobody else has had a go at them just now
+  const fair = (tg) => tg && (!tg.isPlayer || (aiShotT <= 0 && tg.safe <= 0));
+  const shotAt = (tg) => { if (tg.isPlayer) aiShotT = kid ? AI_SHOT_GAP * 1.8 : AI_SHOT_GAP; };
   if (k.item) {
     a.itemT -= dt;
     if (a.itemT <= 0) {
-      if (k.item === 'fire') { const tg = targetAhead(k); if ((tg && tg.prog - k.prog < 55) || a.itemT < -8) useItem(k); }
+      if (k.item === 'fire') {
+        const tg = targetAhead(k);
+        if (fair(tg) && tg.prog - k.prog < 55) { useItem(k); shotAt(tg); }
+        else if (a.itemT < -8 && !(tg && tg.isPlayer)) useItem(k);
+      }
       else if (k.item === 'turbo') { if (bend < 0.3) useItem(k); }
       else useItem(k);
     }
@@ -273,17 +397,29 @@ function aiInput(k, dt) {
   a.hogT -= dt;
   if (k.hogs > 0 && a.hogT <= 0) {
     const tg = targetAhead(k);
-    if (tg && tg.prog - k.prog < 60) { throwHog(k); a.hogT = kid ? rnd(6, 10) : rnd(2.5, 5); }
+    if (fair(tg) && tg.prog - k.prog < 60) { throwHog(k); shotAt(tg); a.hogT = kid ? rnd(9, 14) : rnd(5, 9); }
   }
   return inp;
 }
 
 /* ================= HUD ================= */
-const el = { hogs: $('#hogs'), ammo: $('#ammo'), pos: $('#pos'), lap: $('#lap'), time: $('#time'), speed: $('#speed'), slot: $('#slot'), slotLabel: $('#slotLabel'), msg: $('#msg'), cd: $('#cd'), drift: $('#driftBar') };
+const el = { hogs: $('#hogs'), ammo: $('#ammo'), pos: $('#pos'), lap: $('#lap'), slot: $('#slot'), slotLabel: $('#slotLabel'), msg: $('#msg'), cd: $('#cd'), drift: $('#drift'), bolts: [1, 2].map((n) => $('#bolt' + n)) };
 const fmt = (t) => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(2).padStart(5, '0')}`; };
-let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1;
-$('#hogIcon').innerHTML = ICONS.hedgehog;
+let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1, lastDrift = 0;
+{
+  const pic = hedgehogPicture();
+  $('#hogIcon').innerHTML = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
+}
 function showMsg(t, dur = 1.3) { el.msg.textContent = t; el.msg.classList.remove('pop'); void el.msg.offsetWidth; el.msg.classList.add('pop'); el.msg.hidden = false; msgTimer = dur; }
+const itemPop = $('#itemPop');
+let itemPopTimer = 0;
+function showItemPop(it) {
+  $('#itemPopIcon').innerHTML = ICONS[it];
+  $('#itemPopName').textContent = ITEM_NAMES[it] + '!';
+  itemPop.hidden = true; void itemPop.offsetWidth; itemPop.hidden = false;
+  clearTimeout(itemPopTimer);
+  itemPopTimer = setTimeout(() => { itemPop.hidden = true; }, 1400);
+}
 function setText(key, node, v) { if (lastHud[key] !== v) { node.textContent = v; lastHud[key] = v; } }
 const ranked = () => karts.slice().sort((a, b) => (b.finished ? 1e9 - b.finishTime : b.prog) - (a.finished ? 1e9 - a.finishTime : a.prog));
 
@@ -291,8 +427,6 @@ function updateHud(dt) {
   const rank = ranked().indexOf(player) + 1;
   setText('pos', el.pos, player.finished ? `${player.place}.` : `${rank}.`);
   setText('lap', el.lap, `${clamp(player.lap + 1, 1, LAPS)}/${LAPS}`);
-  setText('time', el.time, fmt(player.finished ? player.finishTime : raceTime));
-  setText('speed', el.speed, String(Math.round(Math.abs(player.speed) * 3.6)));
   if (player.hogs !== lastHogs) {
     el.hogs.textContent = String(player.hogs);
     el.ammo.classList.toggle('empty', player.hogs === 0);
@@ -300,19 +434,26 @@ function updateHud(dt) {
     if (player.hogs > lastHogs && lastHogs >= 0) { el.ammo.classList.remove('pop'); void el.ammo.offsetWidth; el.ammo.classList.add('pop'); }
     lastHogs = player.hogs;
   }
-  let slot;
-  if (player.rollT > 0) slot = 'roll:' + ['fire', 'icecream', 'turbo'][Math.floor(gTime * 14) % 3];
-  else slot = player.item || '';
+  const slot = player.item || '';
   if (slot !== lastSlot) {
-    const key = slot.replace('roll:', '');
-    el.slot.innerHTML = key ? ICONS[key] : '';
-    el.slot.classList.toggle('rolling', slot.startsWith('roll:'));
-    el.slotLabel.textContent = slot.startsWith('roll:') ? '…' : key ? ITEM_NAMES[key] : 'Prázdné';
+    el.slot.innerHTML = slot ? ICONS[slot] : '';
+    el.slotLabel.textContent = slot ? ITEM_NAMES[slot] : 'Prázdné';
+    if (slot) { el.slot.classList.remove('pop'); void el.slot.offsetWidth; el.slot.classList.add('pop'); showItemPop(slot); }
     lastSlot = slot;
   }
   const ch = player.drifting ? player.driftCharge : 0;
-  el.drift.style.width = `${clamp(ch / 1.8, 0, 1) * 100}%`;
-  el.drift.style.background = ch > 1.8 ? '#ff8a1f' : ch > 0.8 ? '#4aa8ff' : '#d6dde8';
+  el.drift.classList.toggle('on', player.drifting);
+  const fills = [ch / DRIFT_MINI, (ch - DRIFT_MINI) / (DRIFT_BIG - DRIFT_MINI)];
+  fills.forEach((f, n) => {
+    const h = clamp(f, 0, 1) * 64, r = el.bolts[n].querySelector('rect');
+    r.setAttribute('y', String(64 - h)); r.setAttribute('height', String(h));
+  });
+  const level = ch > DRIFT_BIG ? 2 : ch > DRIFT_MINI ? 1 : 0;
+  if (level !== lastDrift) {
+    el.bolts.forEach((b, n) => b.classList.toggle('lit', level > n));
+    if (level > lastDrift) sfx.charge(level);
+    lastDrift = level;
+  }
   if (msgTimer > 0) { msgTimer -= dt; if (msgTimer <= 0) el.msg.hidden = true; }
   drawMini();
 }
@@ -370,8 +511,6 @@ function selectChar(i) {
   selected = i;
   store.set('dk-char', String(i));
   charsEl.querySelectorAll('.char').forEach((b, j) => b.setAttribute('aria-checked', String(j === i)));
-  const st = CHARS[i].stats, bar = (v) => `<div class="bar"><i style="width:${clamp((v - 0.84) / 0.3, 0.08, 1) * 100}%"></i></div>`;
-  $('#stats').innerHTML = `<span>Rychlost</span>${bar(st.speed)}<span>Zrychlení</span>${bar(st.accel)}<span>Ovládání</span>${bar(st.handling)}`;
   placeGrid();
 }
 document.querySelectorAll('#cc button').forEach((b) => b.addEventListener('click', () => {
@@ -398,6 +537,7 @@ function showBest() {
 function show(id, on) { $(id).hidden = !on; }
 function startRace() {
   initAudio();
+  setGearBase(CC[cls()].base);
   placeGrid();
   for (const p of projectiles) scene.remove(p.mesh);
   for (const h of hazards) scene.remove(h.m);
@@ -405,11 +545,11 @@ function startRace() {
   for (const b of boxes) { b.respawn = 0; b.m.visible = true; }
   resetHedgehogs();
   for (const q of parts) q.life = 0;
-  finishCount = 0; raceTime = 0; cdT = 3.6; cdShown = null; launchAt = null; doneT = 0;
+  finishCount = 0; raceTime = 0; aiShotT = 0; cdT = 3.6; cdShown = null; launchAt = null; doneT = 0;
   state = 'countdown'; paused = false;
   camH = player.h;
-  lastHud = {}; lastSlot = '-'; lastHogs = -1;
-  el.msg.hidden = true; el.cd.hidden = true;
+  lastHud = {}; lastSlot = '-'; lastHogs = -1; lastDrift = 0;
+  el.msg.hidden = true; el.cd.hidden = true; itemPop.hidden = true;
   show('#menu', false); show('#results', false); show('#pause', false); show('#hud', true); show('#touch', isTouch);
   requestAnimationFrame(setupMini);
 }
@@ -484,30 +624,31 @@ function simulate(dt) {
   }
   if (state !== 'race' && state !== 'done') return;
   raceTime += dt;
+  if (aiShotT > 0) aiShotT -= dt;
   for (const k of karts) {
-    if (!k.isPlayer) {
-      const diff = player.prog - k.prog;
-      k.mul = k.ai.skill * clamp(1 + (diff / N) * 0.35, 0.86, 1.14);
-    }
+    k.mul = paceMul(k);
     let inp;
     if (k.isPlayer && !k.finished) {
       inp = playerInput();
       // one fire button: the item from a box goes first, otherwise a hedgehog
       if (firePressed) {
-        if (k.item && k.rollT <= 0) useItem(k);
+        if (k.item) useItem(k);
         else if (k.hogs > 0) throwHog(k);
-        else if (msgTimer <= 0 && k.rollT <= 0) showMsg('Žádní ježci!', 0.8);
+        else if (msgTimer <= 0) showMsg('Žádní ježci!', 0.8);
       }
     } else inp = aiInput(k, dt);
     if (k.hogCd > 0) k.hogCd -= dt;
-    if (k.rollT > 0) { k.rollT -= dt; if (k.rollT <= 0) { k.item = k.pending; k.pending = null; } }
+    if (k.safe > 0) k.safe -= dt;
+    if (k.crashCd > 0) k.crashCd -= dt;
+    if (k.shake > 0) k.shake = Math.max(0, k.shake - dt * 2.5);
     const lapBefore = k.lap;
     stepKart(k, inp, dt);
     if (k.isPlayer && k.lap > lapBefore && k.lap < LAPS && k.lap > 0) showMsg(k.lap === LAPS - 1 ? 'Poslední kolo!' : `Kolo ${k.lap + 1}`);
     if (!k.finished && k.lap >= LAPS) {
       k.finished = true; k.finishTime = raceTime; k.place = ++finishCount;
-      if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); }
+      if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); silenceEngine(0.4); }
     }
+    if (k.kid && !k.finished) rescueKid(k, dt);
     if (k.isPlayer && !k.finished) {
       const dot = k.vx * T[k.idx].x + k.vz * T[k.idx].z;
       k.wrongT = dot < -4 ? k.wrongT + dt : 0;
@@ -524,6 +665,7 @@ function simulate(dt) {
       A.x -= nx * push; A.z -= nz * push; B.x += nx * push; B.z += nz * push;
       const rv = (B.vx - A.vx) * nx + (B.vz - A.vz) * nz;
       if (rv < 0) { A.vx += rv * nx * 0.5; A.vz += rv * nz * 0.5; B.vx -= rv * nx * 0.5; B.vz -= rv * nz * 0.5; }
+      if (rv < -1.5 && A.crashCd <= 0 && B.crashCd <= 0) bump(A, B, nx, nz, -rv);
     }
   }
 
@@ -535,9 +677,10 @@ function simulate(dt) {
       if (dx * dx + dz * dz < 2.5 * 2.5) {
         b.m.visible = false; b.respawn = 2.5;
         burst(b.m.position.x, 1.3, b.m.position.z, 16, 1, 0.8, 0.5);
-        if (!k.item && k.rollT <= 0) {
-          if (k.isPlayer) { k.pending = rollItem(k); k.rollT = 1.0; sfx.pickup(); }
-          else { k.item = rollItem(k); k.ai.itemT = rnd(1, 4); }
+        if (!k.item) {
+          k.item = rollItem(k);
+          if (k.isPlayer) sfx.pickup();
+          else k.ai.itemT = rnd(1, 4);
         }
         break;
       }
@@ -562,13 +705,37 @@ function simulate(dt) {
       if (ahead < 90) pr.lat += clamp(pr.target.lat - pr.lat, -16 * dt, 16 * dt);
     }
     const fire = pr.kind === 'fire';
+    if (pr.kind === 'ice') {
+      const i0 = pr.idx, i1 = (pr.idx + 1) % N, u = pr.age / ICE_FLIGHT;
+      const x = P[i0].x + (P[i1].x - P[i0].x) * pr.f + S[i0].x * pr.lat, z = P[i0].z + (P[i1].z - P[i0].z) * pr.f + S[i0].z * pr.lat;
+      pr.mesh.position.set(x, Math.max(0, 1.2 + 7 * u * (1 - u) - 1.2 * u), z);
+      pr.mesh.rotation.y += dt * 9;
+      if (Math.random() < 0.6) emit(x, pr.mesh.position.y + 0.4, z, rnd(-1, 1), rnd(-1, 1), rnd(-1, 1), 0.97, 0.55, 0.65, 0.35);
+      if (pr.life <= 0) {
+        pr.mesh.position.y = 0;
+        // settles facing the karts coming up behind
+        pr.mesh.rotation.set(0, headingAt(pr.idx) + Math.PI, 0);
+        pr.mesh.userData.splat.visible = true;
+        burst(x, 0.5, z, 18, 0.97, 0.6, 0.7);
+        if (pr.owner.isPlayer) sfx.splat();
+        // the thrower drives past their own ice cream
+        hazards.push({ x, z, life: 30, m: pr.mesh, owner: pr.owner, ownerSafe: 3 });
+        projectiles.splice(n, 1);
+      }
+      continue;
+    }
     if (fire) pr.lat = clamp(pr.lat + pr.latV * dt, -W - 3, W + 3);
     const i0 = pr.idx, i1 = (pr.idx + 1) % N;
     const x = P[i0].x + (P[i1].x - P[i0].x) * pr.f + S[i0].x * pr.lat, z = P[i0].z + (P[i1].z - P[i0].z) * pr.f + S[i0].z * pr.lat;
     if (fire) {
-      pr.mesh.position.set(x, 0.95, z);
-      pr.mesh.userData.halo.scale.setScalar(1 + Math.sin(pr.age * 30) * 0.12);
-      for (let e = 0; e < 2; e++) emit(x + rnd(-0.3, 0.3), 0.95 + rnd(-0.3, 0.3), z + rnd(-0.3, 0.3), rnd(-1.5, 1.5), rnd(1, 3.5), rnd(-1.5, 1.5), 1, rnd(0.3, 0.6), 0.08, rnd(0.25, 0.4));
+      const m = pr.mesh, dx = x - m.position.x, dz = z - m.position.z;
+      if (pr.age > dt) m.rotation.y = Math.atan2(dx, dz);
+      m.position.set(x, 1.05, z);
+      animateFireball(m, pr.age);
+      // flames licking backwards, and a few sparks that fall away
+      const fx = Math.sin(m.rotation.y), fz = Math.cos(m.rotation.y);
+      for (let e = 0; e < 3; e++) emit(x - fx * rnd(0.6, 1.6) + rnd(-0.4, 0.4), 1.05 + rnd(-0.4, 0.4), z - fz * rnd(0.6, 1.6) + rnd(-0.4, 0.4), rnd(-1.5, 1.5), rnd(1, 3.5), rnd(-1.5, 1.5), 1, rnd(0.25, 0.55), 0.05, rnd(0.25, 0.45));
+      if (Math.random() < 0.5) emit(x, 1.05, z, rnd(-4, 4), rnd(2, 6), rnd(-4, 4), 1, 0.9, 0.5, rnd(0.3, 0.5), 14);
     } else {
       pr.mesh.position.set(x, 0.62, z);
       pr.mesh.rotation.y = headingAt(i0);
@@ -578,10 +745,10 @@ function simulate(dt) {
     let hit = false;
     for (const k of karts) {
       if ((k === pr.owner && pr.age < 1) || k.y > 1.2) continue;
-      if ((k.x - x) ** 2 + (k.z - z) ** 2 < (fire ? 2.1 : 1.9) ** 2) { hitKart(k, pr.owner); hit = true; break; }
+      if ((k.x - x) ** 2 + (k.z - z) ** 2 < (fire ? 2.1 : 1.9) ** 2) { hitKart(k, pr.owner, pr.kind); hit = true; break; }
     }
     if (hit || pr.life <= 0) {
-      if (fire) burst(x, 1, z, 16, 1, 0.45, 0.1);
+      if (fire) { burst(x, 1, z, 22, 1, 0.45, 0.08); burst(x, 1, z, 10, 1, 0.85, 0.4); }
       else if (!hit) burst(x, 0.6, z, 10, 0.6, 0.45, 0.3);
       scene.remove(pr.mesh); projectiles.splice(n, 1);
     }
@@ -590,18 +757,21 @@ function simulate(dt) {
   // ice-cream hazards
   for (let n = hazards.length - 1; n >= 0; n--) {
     const h = hazards[n];
-    h.life -= dt;
+    h.life -= dt; h.ownerSafe -= dt;
     let hit = false;
     for (const k of karts) {
-      if (k.y > 0.4) continue;
-      if ((k.x - h.x) ** 2 + (k.z - h.z) ** 2 < 1.7 * 1.7) { hitKart(k, null); hit = true; break; }
+      if (k.y > 0.4 || (k === h.owner && h.ownerSafe > 0)) continue;
+      if ((k.x - h.x) ** 2 + (k.z - h.z) ** 2 < 2.1 * 2.1) { hitKart(k, h.owner, 'ice'); hit = true; break; }
     }
     if (hit || h.life <= 0) { scene.remove(h.m); hazards.splice(n, 1); }
   }
 
   if (state === 'done') { doneT -= dt; if (doneT <= 0) showResults(); }
-  setEngine(player, player.thr, dt);
-  updateOpponents(player, karts.filter((o) => o !== player), camH);
+  // after the finish line only the fanfare plays, the engines fade out
+  if (state === 'race') {
+    setEngine(player, player.thr, dt);
+    updateOpponents(player, karts.filter((o) => o !== player), camH);
+  }
 }
 
 function updateCamera(dt) {
@@ -620,6 +790,8 @@ function updateCamera(dt) {
   const back = k.ch.camBack || 8.8, up = k.ch.camUp || 3.7;
   camTarget.set(k.x - Math.sin(camH) * back, k.y + up, k.z - Math.cos(camH) * back);
   camera.position.lerp(camTarget, 1 - Math.exp(-(state === 'countdown' ? 3 : 10) * dt));
+  const sh = k.shake * k.shake * 0.3;
+  camera.position.x += Math.sin(gTime * 61) * sh; camera.position.y += Math.sin(gTime * 53) * sh * 0.6;
   camLook.set(k.x + Math.sin(camH) * 5, k.y + 1.5, k.z + Math.cos(camH) * 5);
   camera.lookAt(camLook);
   const fov = 64 + clamp(Math.abs(k.speed) / 40, 0, 1.4) * 8 + (k.boost > 0 ? 7 : 0);

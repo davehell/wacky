@@ -1,15 +1,14 @@
 import * as THREE from 'three';
-import { col } from './util.js';
-import { canvasTex, std, mesh } from './render.js';
+import { canvasTex, std, mesh, snapshots } from './render.js';
 
 /* ================= Characters & karts ================= */
 const CHARS = [
-  { id: 'shark', name: 'Žralok Žorž', skin: 0x4f86c6, kart: 0xfb5607, stats: { speed: 1.07, accel: 0.93, handling: 0.95 } },
-  { id: 'giraffe', name: 'Žirafa Žofie', skin: 0xf6c453, kart: 0x06b6a4, shirt: 0xef476f, camUp: 5.1, camBack: 10.5, stats: { speed: 1.03, accel: 0.96, handling: 0.98 } },
-  { id: 'deer', name: 'Jelen Jarda', skin: 0xb0703f, kart: 0x8338ec, shirt: 0x06b6a4, stats: { speed: 1.0, accel: 1.02, handling: 1.03 } },
-  { id: 'frog', name: 'Žabák Franta', skin: 0x5cbf4a, kart: 0xef476f, shirt: 0xf5f5f0, stats: { speed: 0.96, accel: 1.1, handling: 1.08 } },
-  { id: 'bunny', name: 'Zajíček Bobek', skin: 0xf7f4ef, kart: 0x3a86ff, shirt: 0xffc93c, stats: { speed: 0.97, accel: 1.08, handling: 1.12 } },
-  { id: 'elephant', name: 'Slonice Ela', skin: 0xa7aecb, kart: 0xffc93c, shirt: 0x3a86ff, stats: { speed: 1.09, accel: 0.9, handling: 0.92 } },
+  { id: 'shark', name: 'Žralok Žorž', skin: 0x4f86c6, kart: 0xfb5607 },
+  { id: 'giraffe', name: 'Žirafa Žofie', skin: 0xf6c453, kart: 0x06b6a4, shirt: 0xef476f, camUp: 5.1, camBack: 10.5 },
+  { id: 'deer', name: 'Jelen Jarda', skin: 0xb0703f, kart: 0x8338ec, shirt: 0x06b6a4 },
+  { id: 'frog', name: 'Žabák Franta', skin: 0x5cbf4a, kart: 0xef476f, shirt: 0xf5f5f0 },
+  { id: 'bunny', name: 'Zajíček Bobek', skin: 0xf7f4ef, kart: 0x3a86ff, shirt: 0xffc93c },
+  { id: 'elephant', name: 'Slonice Ela', skin: 0xa7aecb, kart: 0xffc93c, shirt: 0x3a86ff },
 ];
 
 const SPH = new THREE.SphereGeometry(1, 28, 20);
@@ -91,7 +90,7 @@ const SPECIES = {
     n.rotation.x = 0.14;
     part(n, new THREE.CylinderGeometry(0.19, 0.27, 1.6, 16), sp, 0, 0.8, 0);
     part(n, new THREE.BoxGeometry(0.1, 1.45, 0.14), brown, 0, 0.85, -0.22);
-    part(n, SPH, sp, 0, 1.7, 0.08, 0.36, 0.36, 0.5);
+    n.userData.face = part(n, SPH, sp, 0, 1.7, 0.08, 0.36, 0.36, 0.5);
     part(n, SPH, muzzle, 0, 1.6, 0.5, 0.27, 0.24, 0.25);
     for (const s of [-1, 1]) {
       part(n, SPH, M.black, s * 0.08, 1.66, 0.72, 0.035);
@@ -197,37 +196,19 @@ const SPECIES = {
 function makeDriver(ch) {
   const g = new THREE.Group();
   const head = SPECIES[ch.id](g, ch);
-  return { group: g, head };
+  // the head sphere is the first part of the head, except for the giraffe, whose "head" is the whole neck
+  return { group: g, head, face: head.userData.face || head.children[0] };
 }
 
+// Menu portraits show just the face: framed on the head sphere, ears and antlers may run off the edge
 function makePortraits() {
-  let r = null;
-  try {
-    r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-    r.setPixelRatio(1); r.setSize(192, 192); r.outputEncoding = THREE.sRGBEncoding;
-    const sc = new THREE.Scene();
-    sc.add(new THREE.HemisphereLight(col(0xffffff), col(0x8890aa), 0.9));
-    const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(3, 5, 6); sc.add(dl);
-    const cam = new THREE.PerspectiveCamera(26, 1, 0.1, 60);
-    return CHARS.map((ch) => {
-      const d = makeDriver(ch);
-      sc.add(d.group);
-      d.group.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(d.group);
-      const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
-      const dist = (Math.max(sz.x, sz.y) * 0.62) / Math.tan((13 * Math.PI) / 180);
-      cam.position.set(c.x + dist * 0.42, c.y + dist * 0.1, c.z + dist * 0.9);
-      cam.lookAt(c);
-      r.render(sc, cam);
-      const url = r.domElement.toDataURL('image/png');
-      sc.remove(d.group);
-      return url;
-    });
-  } catch (e) {
-    return [];
-  } finally {
-    if (r) { r.dispose(); if (r.forceContextLoss) r.forceContextLoss(); }
-  }
+  const faces = [];
+  const drivers = CHARS.map((ch) => { const d = makeDriver(ch); faces.push(d.face); return d.group; });
+  return snapshots(drivers, (obj) => {
+    const face = faces[drivers.indexOf(obj)];
+    const center = face.getWorldPosition(new THREE.Vector3());
+    return { center, radius: Math.max(face.scale.x, face.scale.y) * 1.35, dir: new THREE.Vector3(0.28, 0.12, 1) };
+  });
 }
 
 function makeKart(ch) {

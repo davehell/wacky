@@ -13,11 +13,11 @@
 <div id="stage"></div>
 
 <div class="hud" id="hud" hidden>
-  <div class="hud__tl">
-    <div class="pos outline"><span id="pos">6.</span><small id="posOf">/6</small></div>
-    <div class="chip"><div><span>Kolo</span><b id="lap">1/3</b></div><div><span>Čas</span><b id="time">0:00.00</b></div></div>
-  </div>
-  <div class="hud__tr">
+  <div class="hud__top">
+    <div>
+      <div class="stat outline" id="pos">6.</div>
+      <div class="slot-label">Pořadí</div>
+    </div>
     <div>
       <div class="ammo" id="ammo"><span id="hogIcon"></span><b id="hogs">0</b></div>
       <div class="slot-label">Ježci</div>
@@ -26,28 +26,35 @@
       <div class="slot" id="slot"></div>
       <div class="slot-label" id="slotLabel">Prázdné</div>
     </div>
-    <div class="icon-btns">
-      <button class="icon-btn" id="pauseBtn" aria-label="Pauza"><svg viewBox="0 0 20 20"><rect x="4" y="3" width="4" height="14" rx="1.5" fill="currentColor"/><rect x="12" y="3" width="4" height="14" rx="1.5" fill="currentColor"/></svg></button>
-      <button class="icon-btn" id="muteBtn" aria-label="Zvuk"><svg viewBox="0 0 20 20" id="muteIcon"></svg></button>
+    <div>
+      <div class="stat stat--lap outline" id="lap">1/3</div>
+      <div class="slot-label">Kolo</div>
     </div>
   </div>
-  <div class="hud__bl">
-    <div class="speed outline"><span id="speed">0</span><small>km/h</small></div>
-    <div class="drift-meter race-only" aria-hidden="true"><i id="driftBar"></i></div>
+  <div class="hud__tr">
+    <div class="icon-btns">
+      <button class="icon-btn" id="pauseBtn" aria-label="Pauza"><svg viewBox="0 0 20 20"><rect x="4" y="3" width="4" height="14" rx="1.5" fill="currentColor"/><rect x="12" y="3" width="4" height="14" rx="1.5" fill="currentColor"/></svg></button>
+    </div>
+  </div>
+  <!-- drift charge: the first bolt fills up for the small turbo, the second for the big one -->
+  <div class="drift race-only" id="drift" aria-hidden="true">
+    <svg class="bolt bolt--1" id="bolt1" viewBox="0 0 64 64"><defs><clipPath id="boltClip1"><rect x="0" y="64" width="64" height="0"/></clipPath></defs><path class="bolt__back" d="M36 4 12 36h16l-6 24 30-36H35z"/><path class="bolt__fill" clip-path="url(#boltClip1)" d="M36 4 12 36h16l-6 24 30-36H35z"/><path class="bolt__line" d="M36 4 12 36h16l-6 24 30-36H35z"/></svg>
+    <svg class="bolt bolt--2" id="bolt2" viewBox="0 0 64 64"><defs><clipPath id="boltClip2"><rect x="0" y="64" width="64" height="0"/></clipPath></defs><path class="bolt__back" d="M36 4 12 36h16l-6 24 30-36H35z"/><path class="bolt__fill" clip-path="url(#boltClip2)" d="M36 4 12 36h16l-6 24 30-36H35z"/><path class="bolt__line" d="M36 4 12 36h16l-6 24 30-36H35z"/></svg>
   </div>
   <div class="hud__br"><canvas id="mini" aria-label="Mapa trati"></canvas></div>
+  <div class="item-pop" id="itemPop" hidden><div class="item-pop__icon" id="itemPopIcon"></div><b class="outline" id="itemPopName"></b></div>
   <div class="msg outline" id="msg"></div>
   <div class="cd outline" id="cd"></div>
 </div>
 
 <section class="overlay" id="menu">
   <div class="panel">
+    <button class="icon-btn icon-btn--menu" id="muteBtn" aria-label="Zvuk"><svg viewBox="0 0 20 20" id="muteIcon"></svg></button>
     <p class="eyebrow">Arkádové závody zvířat · Slunečný okruh</p>
     <h1>Divoká kola</h1>
     <p class="lede">Tři kola, šest jezdců. Zatáčej, sbírej ježky, kteří si hoví na trati, a házej je po soupeřích. Z krabic s otazníkem padá oheň, zmrzlina a turbo.</p>
     <h2>Jezdec</h2>
     <div class="chars" id="chars" role="radiogroup" aria-label="Jezdec"></div>
-    <div class="stats" id="stats"></div>
     <h2>Režim</h2>
     <div class="seg seg--2" id="mode" role="radiogroup" aria-label="Režim">
       <button role="radio" data-kid="0" aria-checked="true">Závodní</button>
@@ -69,7 +76,7 @@
       <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>zatáčení (nebo A, D)</dd>
       <dt class="race-only"><kbd>↑</kbd> <kbd>↓</kbd></dt><dd class="race-only">plyn, brzda (nebo W, S)</dd>
       <dt><kbd>Mezerník</kbd> <kbd>Ctrl</kbd></dt><dd>střelba: nejdřív věc z krabice, jinak ježek (ježky sbíráš přejetím, max. 10)</dd>
-      <dt class="race-only"><kbd>Shift</kbd></dt><dd class="race-only">drift: drž v zatáčce, puštěním získáš turbo</dd>
+      <dt class="race-only"><kbd>Shift</kbd></dt><dd class="race-only">drift: drž v zatáčce, až se rozsvítí blesk, pusť a vyrazíš (dva blesky = velké turbo)</dd>
       <dt><kbd>Esc</kbd> <kbd>M</kbd></dt><dd>pauza, zvuk</dd>
       <dt>Gamepad</dt><dd><span class="race-only">RT plyn, LT brzda, RB drift, </span>X nebo Y střelba</dd>
     </dl>
@@ -96,13 +103,17 @@
 
 <div class="touch" id="touch" hidden>
   <div class="grp">
-    <button class="tbtn" data-t="left" aria-label="Doleva"><svg viewBox="0 0 30 30"><path d="M19 5 8 15l11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-    <button class="tbtn" data-t="right" aria-label="Doprava"><svg viewBox="0 0 30 30"><path d="m11 5 11 10-11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-  </div>
-  <div class="grp">
-    <button class="tbtn race-only" data-t="brake">Brzda</button>
     <button class="tbtn tbtn--fire" data-t="fire">Střílej</button>
     <button class="tbtn race-only" data-t="drift">Drift</button>
+  </div>
+  <!-- kids' mode: one wide pad, steer by sliding a finger left or right -->
+  <div class="tpad kid-only" id="tpad" aria-label="Zatáčení tažením prstu">
+    <svg class="tpad__hint" viewBox="0 0 120 30"><path d="M14 5 3 15l11 10M106 5l11 10-11 10M3 15h114" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <i class="tpad__knob" id="tpadKnob"></i>
+  </div>
+  <div class="grp race-only">
+    <button class="tbtn" data-t="left" aria-label="Doleva"><svg viewBox="0 0 30 30"><path d="M19 5 8 15l11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="tbtn" data-t="right" aria-label="Doprava"><svg viewBox="0 0 30 30"><path d="m11 5 11 10-11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
   </div>
 </div>
 

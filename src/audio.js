@@ -4,7 +4,13 @@ import { W } from './track.js';
 /* ================= Audio ================= */
 let AC = null, master = null, sfxBus = null, noiseBuf = null, pulse = null, eng = null, muted = store.get('dk-muted') === '1';
 const opp = [];
-const GEARS = [0, 9, 17, 25, 33, 52];
+// The player's own engine drowned out everything else, so it is silent for now; raise to bring it back
+const PLAYER_ENGINE_VOL = 0;
+// Gear boundaries as fractions of the class's top speed. The top gears sit around cruising speed, so
+// bends, bumps and turbos keep the gearbox busy for the whole race instead of only at the start.
+const GEAR_F = [0, 0.14, 0.3, 0.46, 0.62, 0.78, 0.94, 1.1, 1.45];
+let GEARS = GEAR_F.map((f) => f * 36);
+function setGearBase(base) { GEARS = GEAR_F.map((f) => f * base); }
 function initAudio() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   try {
@@ -41,7 +47,7 @@ function initAudio() {
     const v = voice(1200);
     const peak = AC.createBiquadFilter(); peak.type = 'peaking'; peak.frequency.value = 900; peak.gain.value = 4; peak.Q.value = 1;
     v.gain.connect(peak).connect(master);
-    eng = Object.assign(v, { w: 0, gear: 1, shiftT: 0, skid: loopNoise('bandpass', 1500, 3), rumble: loopNoise('lowpass', 420, 0.7), wind: loopNoise('highpass', 900, 0.5) });
+    eng = Object.assign(v, { w: 0, gear: 1, shiftT: 0, skid: loopNoise('bandpass', 1500, 3), rumble: loopNoise('lowpass', 420, 0.7), vs: 0, blipT: 0, load: 0 });
 
     for (let i = 0; i < 5; i++) {
       const o = voice(1400);
@@ -75,14 +81,50 @@ const sfx = {
   pickup: () => { note(1047, 0, 0.16, 'triangle', 0.07); note(1319, 0.06, 0.16, 'triangle', 0.07); note(1568, 0.12, 0.22, 'triangle', 0.07); },
   hit: () => { note(300, 0, 0.3, 'sine', 0.25, 90); whoosh(0, 0.3, 'bandpass', 1600, 300, 0.25, 1.2); note(880, 0.05, 0.12, 'triangle', 0.05, 440); },
   boost: () => { whoosh(0, 0.5, 'bandpass', 500, 3000, 0.3, 1.4); note(330, 0, 0.35, 'triangle', 0.06, 660); },
-  throw: () => whoosh(0, 0.22, 'bandpass', 2200, 600, 0.18, 2),
-  // a soft rising "fwoosh" per fireball
-  fire: () => { [0, 0.06, 0.12].forEach((t) => whoosh(t, 0.4, 'bandpass', 350, 1500, 0.12, 0.9)); note(220, 0, 0.35, 'triangle', 0.05, 440); },
+  // a hedgehog curls up and rolls away: a springy "boing" and a happy squeak
+  throwHog: () => { whoosh(0, 0.22, 'bandpass', 2200, 600, 0.14, 2); note(330, 0, 0.18, 'triangle', 0.09, 660); note(1175, 0.08, 0.14, 'triangle', 0.04, 1760); },
+  // the ice cream pops out of the kart with a cheerful "plop"
+  throwIce: () => { note(520, 0, 0.12, 'sine', 0.12, 1040); note(1040, 0.1, 0.16, 'triangle', 0.05, 1320); whoosh(0.02, 0.4, 'bandpass', 900, 2400, 0.08, 1.5); },
+  // and lands with a soft wet splat
+  splat: () => { whoosh(0, 0.22, 'lowpass', 1800, 250, 0.16, 0.8); note(400, 0, 0.14, 'sine', 0.08, 180); },
+  // a dragon's breath: a rising roar of air and crackling sparks
+  fire: () => {
+    [0, 0.06, 0.12].forEach((t) => whoosh(t, 0.45, 'bandpass', 300, 1800, 0.14, 0.8));
+    whoosh(0, 0.6, 'lowpass', 600, 2400, 0.1, 0.7);
+    for (let i = 0; i < 6; i++) whoosh(0.08 + i * 0.07, 0.05, 'highpass', 3500, 5000, 0.05, 1);
+    note(196, 0, 0.4, 'triangle', 0.06, 392);
+  },
+  // an opponent the player has hit: a comic "bonk" and a little fanfare
+  score: () => { note(620, 0, 0.14, 'sine', 0.13, 310); note(988, 0.12, 0.12, 'triangle', 0.06); note(1319, 0.2, 0.2, 'triangle', 0.06); },
+  // the extra layer on top of `hit` telling what it was
+  hitBy: (kind) => {
+    if (kind === 'fire') whoosh(0, 0.5, 'highpass', 2500, 6000, 0.08, 0.7);
+    else if (kind === 'ice') whoosh(0, 0.25, 'lowpass', 1800, 250, 0.16, 0.8);
+    else note(1400, 0.02, 0.1, 'triangle', 0.04, 2000);
+  },
+  // hitting a wall: a soft thud and rattling bits, never a harsh bang
+  crash: (s) => {
+    note(170, 0, 0.22, 'sine', 0.12 + 0.12 * s, 70);
+    whoosh(0, 0.25, 'lowpass', 900, 160, 0.12 + 0.12 * s, 0.9);
+    for (let i = 0; i < 3; i++) note(700 + i * 230, 0.05 + i * 0.05, 0.07, 'triangle', 0.03 * s, 500);
+  },
+  // two karts rubbing wheels: a rubbery "boing"
+  bump: (s = 0.5) => {
+    note(150, 0, 0.2, 'sine', 0.08 + 0.12 * s, 70);
+    whoosh(0, 0.18, 'lowpass', 1400, 250, 0.08 + 0.12 * s, 0.9);
+    note(260, 0.02, 0.18, 'triangle', 0.08 + 0.06 * s, 420);
+    note(880, 0.04, 0.08, 'triangle', 0.04 * s, 620);
+  },
   // little squeak of a hedgehog climbing aboard
   hog: () => { note(784, 0, 0.09, 'triangle', 0.06, 1175); note(1175, 0.07, 0.12, 'triangle', 0.05, 1568); },
   beep: () => { note(587, 0, 0.3, 'sine', 0.16); note(1174, 0, 0.2, 'sine', 0.035); },
   go: () => { note(1175, 0, 0.6, 'sine', 0.13); note(1568, 0, 0.6, 'sine', 0.08); note(2350, 0, 0.3, 'sine', 0.02); },
   finish: () => { [784, 988, 1175, 1568].forEach((f, i) => note(f, i * 0.12, i === 3 ? 0.7 : 0.18, 'triangle', 0.09)); },
+  // a bright chime as the drift charge reaches the small (1) or the big (2) turbo
+  charge: (level) => {
+    if (level === 1) { note(1319, 0, 0.18, 'triangle', 0.06); note(1760, 0.07, 0.25, 'triangle', 0.05); }
+    else { note(1568, 0, 0.16, 'triangle', 0.07); note(2093, 0.06, 0.16, 'triangle', 0.06); note(2637, 0.12, 0.3, 'triangle', 0.05); }
+  },
   shift: () => whoosh(0, 0.09, 'bandpass', 2500, 1200, 0.05, 2),
 };
 function gearOf(v) { let g = 1; while (g < GEARS.length - 1 && v >= GEARS[g]) g++; return g; }
@@ -92,12 +134,25 @@ function revOf(v, g) { const lo = GEARS[g - 1], hi = GEARS[g]; return clamp(0.25
 function setEngine(k, throttle, dt, rev = null) {
   if (!eng) return;
   const t = AC.currentTime, v = Math.abs(k.speed), off = Math.abs(k.lat) > W + 1.2;
+  // the gearbox hears a speed that climbs slowly, so the pull through the gears lasts several seconds
+  const top = GEARS[GEARS.length - 3];
+  // a sharp bend "lifts off" a little, dropping a gear on the way in and picking it up on the way out
+  eng.load += (Math.abs(k.st) - eng.load) * Math.min(1, dt * 2);
+  const heard = v * (1 - 0.3 * eng.load);
+  eng.vs = heard > eng.vs ? Math.min(heard, eng.vs + top * 0.12 * dt) : Math.max(heard, eng.vs - top * 0.6 * dt);
   let r;
-  if (rev !== null) r = rev;
+  if (rev !== null) { r = rev; eng.vs = 0; }
   else {
-    const g = gearOf(v);
-    if (g !== eng.gear) { if (g > eng.gear) { eng.shiftT = 0.14; sfx.shift(); } eng.gear = g; }
-    r = revOf(v, g);
+    let g = gearOf(eng.vs);
+    // hold the gear through small dips so it does not hunt up and down
+    if (g === eng.gear - 1 && eng.vs > GEARS[g] - top * 0.015) g = eng.gear;
+    if (g !== eng.gear) {
+      if (g > eng.gear) { eng.shiftT = 0.16; if (PLAYER_ENGINE_VOL > 0) sfx.shift(); } else eng.blipT = 0.18;
+      eng.gear = g;
+    }
+    r = revOf(eng.vs, g);
+    // a downshift blips the throttle
+    if (eng.blipT > 0) r += 0.18;
     if (k.drifting) r += 0.1;
     if (k.boost > 0) r += 0.14;
     if (k.y > 0.05) r += 0.12;
@@ -105,6 +160,7 @@ function setEngine(k, throttle, dt, rev = null) {
     r -= Math.abs(k.st) * 0.05;
   }
   eng.shiftT = Math.max(0, eng.shiftT - dt);
+  eng.blipT = Math.max(0, eng.blipT - dt);
   eng.w += (Math.random() - 0.5) * dt * 0.5;
   eng.w *= 1 - dt * 0.6;
   eng.w = clamp(eng.w, -0.04, 0.04);
@@ -113,11 +169,10 @@ function setEngine(k, throttle, dt, rev = null) {
   eng.osc.frequency.setTargetAtTime(f, t, 0.035);
   eng.lp.frequency.setTargetAtTime(700 + r * 1800 + (throttle ? 700 : 0), t, 0.08);
   const vol = eng.shiftT > 0 ? 0.03 : (throttle ? 0.07 : 0.045) + r * 0.02;
-  eng.gain.gain.setTargetAtTime(vol, t, 0.05);
+  eng.gain.gain.setTargetAtTime(vol * PLAYER_ENGINE_VOL, t, 0.05);
   eng.skid.g.gain.setTargetAtTime(k.drifting ? 0.04 : 0, t, 0.05);
   eng.skid.f.frequency.setTargetAtTime(1300 + v * 12 + Math.sin(t * 9) * 150, t, 0.05);
   eng.rumble.g.gain.setTargetAtTime(off ? clamp(v / 20, 0, 1) * 0.12 : 0, t, 0.08);
-  eng.wind.g.gain.setTargetAtTime(Math.pow(clamp(v / 45, 0, 1.4), 2) * 0.035 * (1 + Math.sin(t * 0.7) * 0.4), t, 0.2);
 }
 // heading: camera yaw, used to pan opponents left or right
 function updateOpponents(listener, others, heading) {
@@ -137,10 +192,11 @@ function updateOpponents(listener, others, heading) {
     if (o.pan) o.pan.pan.setTargetAtTime(clamp(-(dx * rx + dz * rz) / 12, -0.9, 0.9), t, 0.08);
   });
 }
-function silenceEngine() {
+// fade: time constant in seconds, longer for a gentle fade-out at the finish
+function silenceEngine(fade = 0.05) {
   if (!eng) return;
   const t = AC.currentTime;
-  for (const n of [eng.gain, eng.skid.g, eng.rumble.g, eng.wind.g, ...opp.map((o) => o.gain)]) n.gain.setTargetAtTime(0, t, 0.05);
+  for (const n of [eng.gain, eng.skid.g, eng.rumble.g, ...opp.map((o) => o.gain)]) n.gain.setTargetAtTime(0, t, fade);
 }
 function drawMuteIcon() {
   $('#muteIcon').innerHTML = '<path d="M3 7h3l5-4v14l-5-4H3z" fill="currentColor"/>' +
@@ -154,4 +210,4 @@ function toggleMute() {
 }
 drawMuteIcon();
 
-export { initAudio, sfx, setEngine, updateOpponents, silenceEngine, toggleMute };
+export { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute };
