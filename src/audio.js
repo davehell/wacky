@@ -2,7 +2,7 @@ import { $, clamp, store } from './util.js';
 import { W } from './track.js';
 
 /* ================= Audio ================= */
-let AC = null, master = null, sfxBus = null, noiseBuf = null, pulse = null, eng = null, muted = store.get('dk-muted') === '1';
+let AC = null, master = null, sfxBus = null, noiseBuf = null, round = null, eng = null, muted = store.get('dk-muted') === '1';
 const opp = [];
 // Quiet enough to stay under the other karts' engines when they are close, but audible on its own
 // so the player is never driving in total silence when out in front alone
@@ -24,19 +24,26 @@ function initAudio() {
     noiseBuf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    // Pulse wave with a 30 % duty cycle: the nasal buzz of a small single-cylinder engine
-    const H = 32, re = new Float32Array(H), im = new Float32Array(H);
-    for (let n = 1; n < H; n++) im[n] = (Math.sin(n * Math.PI * 0.3) / n) * Math.exp(-n / 14);
-    pulse = AC.createPeriodicWave(re, im);
+    // A round, hollow tone with only a few soft harmonics: a cartoon engine, not a real one
+    const re = new Float32Array(6), im = new Float32Array([0, 1, 0.35, 0.18, 0.06, 0.03]);
+    round = AC.createPeriodicWave(re, im);
 
+    // The "pr-pr-pr" putter is an LFO pumping the volume; a slow wobble on the pitch makes it rubbery
     const voice = (lpFreq) => {
-      const osc = AC.createOscillator(); osc.setPeriodicWave(pulse);
-      const hp = AC.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 150;
-      const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = lpFreq; lp.Q.value = 0.8;
+      const osc = AC.createOscillator(); osc.setPeriodicWave(round);
+      const hp = AC.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 90;
+      const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = lpFreq; lp.Q.value = 0.7;
+      const putt = AC.createGain(); putt.gain.value = 0.6;
+      const lfo = AC.createOscillator(); lfo.frequency.value = 8;
+      const depth = AC.createGain(); depth.gain.value = 0.4;
+      lfo.connect(depth).connect(putt.gain);
+      const wob = AC.createOscillator(); wob.frequency.value = 4.5 + Math.random();
+      const wobDepth = AC.createGain(); wobDepth.gain.value = 20;
+      wob.connect(wobDepth).connect(osc.detune);
       const gain = AC.createGain(); gain.gain.value = 0;
-      osc.connect(hp).connect(lp).connect(gain);
-      osc.start();
-      return { osc, lp, gain };
+      osc.connect(hp).connect(lp).connect(putt).connect(gain);
+      osc.start(); lfo.start(); wob.start();
+      return { osc, lp, lfo, gain };
     };
     const loopNoise = (type, f, q) => {
       const s = AC.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
@@ -46,8 +53,7 @@ function initAudio() {
       return { f: fl, g };
     };
     const v = voice(1200);
-    const peak = AC.createBiquadFilter(); peak.type = 'peaking'; peak.frequency.value = 900; peak.gain.value = 4; peak.Q.value = 1;
-    v.gain.connect(peak).connect(master);
+    v.gain.connect(master);
     eng = Object.assign(v, { w: 0, gear: 1, shiftT: 0, skid: loopNoise('bandpass', 1500, 3), rumble: loopNoise('lowpass', 420, 0.7), vs: 0, blipT: 0, load: 0 });
 
     for (let i = 0; i < 5; i++) {
@@ -126,10 +132,14 @@ const sfx = {
     if (level === 1) { note(1319, 0, 0.18, 'triangle', 0.06); note(1760, 0.07, 0.25, 'triangle', 0.05); }
     else { note(1568, 0, 0.16, 'triangle', 0.07); note(2093, 0.06, 0.16, 'triangle', 0.06); note(2637, 0.12, 0.3, 'triangle', 0.05); }
   },
-  shift: () => whoosh(0, 0.09, 'bandpass', 2500, 1200, 0.05, 2),
+  // a gear change is a little springy "boing"
+  shift: () => note(420, 0, 0.14, 'sine', 0.035, 680),
 };
 function gearOf(v) { let g = 1; while (g < GEARS.length - 1 && v >= GEARS[g]) g++; return g; }
 function revOf(v, g) { const lo = GEARS[g - 1], hi = GEARS[g]; return clamp(0.25 + 0.75 * ((v - lo) / (hi - lo)), 0.2, 1); }
+// a wide pitch sweep per gear reads as a cartoon "vroooom"
+const pitchOf = (r) => 95 + r * 230;
+const puttOf = (r) => 7 + r * 13;
 
 // rev: optional override (0..1) used while waiting on the grid
 function setEngine(k, throttle, dt, rev = null) {
@@ -166,9 +176,10 @@ function setEngine(k, throttle, dt, rev = null) {
   eng.w *= 1 - dt * 0.6;
   eng.w = clamp(eng.w, -0.04, 0.04);
   const bump = off && v > 5 ? (Math.random() - 0.5) * 0.1 : 0;
-  const f = (78 + r * 170) * (1 + eng.w + bump) * (eng.shiftT > 0 ? 0.9 : 1);
+  const f = pitchOf(r) * (1 + eng.w + bump) * (eng.shiftT > 0 ? 0.85 : 1);
   eng.osc.frequency.setTargetAtTime(f, t, 0.035);
-  eng.lp.frequency.setTargetAtTime(700 + r * 1800 + (throttle ? 700 : 0), t, 0.08);
+  eng.lfo.frequency.setTargetAtTime(puttOf(r) + (throttle ? 2 : 0), t, 0.1);
+  eng.lp.frequency.setTargetAtTime(900 + r * 1500 + (throttle ? 400 : 0), t, 0.08);
   const vol = eng.shiftT > 0 ? 0.03 : (throttle ? 0.07 : 0.045) + r * 0.02;
   eng.gain.gain.setTargetAtTime(vol * PLAYER_ENGINE_VOL, t, 0.05);
   eng.skid.g.gain.setTargetAtTime(k.drifting ? 0.04 : 0, t, 0.05);
@@ -187,8 +198,9 @@ function updateOpponents(listener, others, heading) {
     const vr = ((k.vx - listener.vx) * dx + (k.vz - listener.vz) * dz) / d;
     const doppler = clamp(1 - vr / 70, 0.75, 1.3);
     const v = Math.abs(k.speed);
-    const f = (78 + revOf(v, gearOf(v)) * 170) * o.pitch * doppler;
-    o.osc.frequency.setTargetAtTime(f, t, 0.05);
+    const r = revOf(v, gearOf(v));
+    o.osc.frequency.setTargetAtTime(pitchOf(r) * o.pitch * doppler, t, 0.05);
+    o.lfo.frequency.setTargetAtTime(puttOf(r) * o.pitch, t, 0.1);
     o.gain.gain.setTargetAtTime(0.06 * Math.pow(clamp(1 - d / 50, 0, 1), 2), t, 0.08);
     if (o.pan) o.pan.pan.setTargetAtTime(clamp(-(dx * rx + dz * rz) / 12, -0.9, 0.9), t, 0.08);
   });
