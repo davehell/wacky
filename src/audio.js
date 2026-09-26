@@ -4,6 +4,8 @@ import { W } from './track.js';
 /* ================= Audio ================= */
 let AC = null, master = null, sfxBus = null, noiseBuf = null, pulse = null, eng = null, muted = store.get('dk-muted') === '1';
 const opp = [];
+// The player's own engine drowned out everything else, so it is silent for now; raise to bring it back
+const PLAYER_ENGINE_VOL = 0;
 // Gear boundaries as fractions of the class's top speed. The top gears sit around cruising speed, so
 // bends, bumps and turbos keep the gearbox busy for the whole race instead of only at the start.
 const GEAR_F = [0, 0.14, 0.3, 0.46, 0.62, 0.78, 0.94, 1.1, 1.45];
@@ -140,7 +142,7 @@ function setEngine(k, throttle, dt, rev = null) {
     // hold the gear through small dips so it does not hunt up and down
     if (g === eng.gear - 1 && eng.vs > GEARS[g] - top * 0.015) g = eng.gear;
     if (g !== eng.gear) {
-      if (g > eng.gear) { eng.shiftT = 0.16; sfx.shift(); } else eng.blipT = 0.18;
+      if (g > eng.gear) { eng.shiftT = 0.16; if (PLAYER_ENGINE_VOL > 0) sfx.shift(); } else eng.blipT = 0.18;
       eng.gear = g;
     }
     r = revOf(eng.vs, g);
@@ -162,7 +164,7 @@ function setEngine(k, throttle, dt, rev = null) {
   eng.osc.frequency.setTargetAtTime(f, t, 0.035);
   eng.lp.frequency.setTargetAtTime(700 + r * 1800 + (throttle ? 700 : 0), t, 0.08);
   const vol = eng.shiftT > 0 ? 0.03 : (throttle ? 0.07 : 0.045) + r * 0.02;
-  eng.gain.gain.setTargetAtTime(vol, t, 0.05);
+  eng.gain.gain.setTargetAtTime(vol * PLAYER_ENGINE_VOL, t, 0.05);
   eng.skid.g.gain.setTargetAtTime(k.drifting ? 0.04 : 0, t, 0.05);
   eng.skid.f.frequency.setTargetAtTime(1300 + v * 12 + Math.sin(t * 9) * 150, t, 0.05);
   eng.rumble.g.gain.setTargetAtTime(off ? clamp(v / 20, 0, 1) * 0.12 : 0, t, 0.08);
