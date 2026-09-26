@@ -109,7 +109,12 @@ const sfx = {
     for (let i = 0; i < 3; i++) note(700 + i * 230, 0.05 + i * 0.05, 0.07, 'triangle', 0.03 * s, 500);
   },
   // two karts rubbing wheels: a rubbery "boing"
-  bump: () => { note(240, 0, 0.16, 'sine', 0.1, 360); whoosh(0, 0.12, 'bandpass', 700, 300, 0.06, 1.2); },
+  bump: (s = 0.5) => {
+    note(150, 0, 0.2, 'sine', 0.08 + 0.12 * s, 70);
+    whoosh(0, 0.18, 'lowpass', 1400, 250, 0.08 + 0.12 * s, 0.9);
+    note(260, 0.02, 0.18, 'triangle', 0.08 + 0.06 * s, 420);
+    note(880, 0.04, 0.08, 'triangle', 0.04 * s, 620);
+  },
   // little squeak of a hedgehog climbing aboard
   hog: () => { note(784, 0, 0.09, 'triangle', 0.06, 1175); note(1175, 0.07, 0.12, 'triangle', 0.05, 1568); },
   beep: () => { note(587, 0, 0.3, 'sine', 0.16); note(1174, 0, 0.2, 'sine', 0.035); },

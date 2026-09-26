@@ -42,7 +42,7 @@ function resetKart(k, slot) {
     x: P[i].x + S[i].x * lat, z: P[i].z + S[i].z * lat, y: 0, hopV: 0,
     h: headingAt(i), speed: 0, vx: 0, vz: 0, st: 0,
     drifting: false, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
-    item: null, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, shake: 0, crashCd: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
+    item: null, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, shake: 0, crashCd: 0, pushX: 0, pushZ: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
   });
   // a touch slower than the player at the top speed, each with its own comfortable gap
   k.ai.skill = CC[cls()].ai * rnd(0.93, 0.97);
@@ -192,6 +192,13 @@ function stepKart(k, inp, dt) {
   k.vx += (fx * k.speed - k.vx) * g;
   k.vz += (fz * k.speed - k.vz) * g;
   k.x += k.vx * dt; k.z += k.vz * dt;
+  // a shove from a collision that dies away on its own, independent of the grip
+  if (k.pushX || k.pushZ) {
+    k.x += k.pushX * dt; k.z += k.pushZ * dt;
+    const f = Math.exp(-5 * dt);
+    k.pushX *= f; k.pushZ *= f;
+    if (Math.abs(k.pushX) + Math.abs(k.pushZ) < 0.05) k.pushX = k.pushZ = 0;
+  }
   if (k.hopV || k.y > 0) { k.y += k.hopV * dt; k.hopV -= 24 * dt; if (k.y <= 0) { k.y = 0; k.hopV = 0; } }
 
   const i = nearest(k.x, k.z, k.idx), p = P[i], sd = S[i];
@@ -249,16 +256,36 @@ function rescueKid(k, dt) {
   const i = k.idx, lat = clamp(k.lat, -W * 0.3, W * 0.3);
   Object.assign(k, {
     x: P[i].x + S[i].x * lat, z: P[i].z + S[i].z * lat, lat, h: headingAt(i),
-    speed: Math.max(k.speed, 14) * 0.6, y: 0.8, hopV: 3, drifting: false, lostT: 0, wrongT: 0, safe: 1.5,
+    speed: Math.max(k.speed, 14) * 0.6, y: 0.8, hopV: 3, drifting: false, lostT: 0, wrongT: 0, safe: 1.5, pushX: 0, pushZ: 0,
   });
   k.vx = Math.sin(k.h) * k.speed; k.vz = Math.cos(k.h) * k.speed;
   if (k.isPlayer) { camH = k.h; showMsg('Zpátky na trať!', 1); sfx.pickup(); }
   burst(k.x, 1.2, k.z, 24, 1, 1, 1);
 }
 
-// a kart that slams into the tyre wall: sparks, a thud and a good shake
+// Two karts knock into each other: both are shoved apart, turned away and bounced up a little.
+// n points from A to B, v is the closing speed.
+function bump(A, B, nx, nz, v) {
+  const s = clamp(v / 12, 0.35, 1), shove = 5 + 9 * s, kick = 0.1 + 0.14 * s;
+  for (const [k, sx, sz] of [[A, -nx, -nz], [B, nx, nz]]) {
+    k.pushX += sx * shove; k.pushZ += sz * shove;
+    // turn away from the other kart (the push points away from it); increasing h turns left
+    const leftX = Math.cos(k.h), leftZ = -Math.sin(k.h);
+    k.h += Math.sign(sx * leftX + sz * leftZ) * kick;
+    if (k.y <= 0.001) k.hopV = 2.5 + 2 * s;
+    k.shake = Math.max(k.shake, 0.45 + 0.45 * s); k.crashCd = 0.35;
+  }
+  const x = (A.x + B.x) / 2, z = (A.z + B.z) / 2;
+  burst(x, 0.8, z, Math.round(10 + 12 * s), 1, 0.8, 0.35);
+  for (let n = 0; n < 6; n++) emit(x, 1.4, z, rnd(-4, 4), rnd(3, 6), rnd(-4, 4), 1, 1, 0.55, 0.6, 10);
+  if (A.isPlayer || B.isPlayer) sfx.bump(s);
+}
+
+// a kart that slams into the tyre wall: sparks, a thud, a bounce back and a good shake
 function crash(k, s, x, z) {
   k.crashCd = 0.5; k.shake = Math.max(k.shake, 0.5 + 0.5 * s);
+  const ax = k.x - x, az = k.z - z, al = Math.hypot(ax, az) || 1;
+  k.pushX += (ax / al) * (4 + 8 * s); k.pushZ += (az / al) * (4 + 8 * s);
   burst(x, 0.7, z, Math.round(8 + 14 * s), 1, 0.75, 0.35);
   for (let n = 0; n < 8; n++) emit(x, 0.4, z, rnd(-3, 3), rnd(1, 3), rnd(-3, 3), 0.45, 0.4, 0.33, 0.7, 3);
   if (k.isPlayer) sfx.crash(s);
@@ -612,11 +639,7 @@ function simulate(dt) {
       A.x -= nx * push; A.z -= nz * push; B.x += nx * push; B.z += nz * push;
       const rv = (B.vx - A.vx) * nx + (B.vz - A.vz) * nz;
       if (rv < 0) { A.vx += rv * nx * 0.5; A.vz += rv * nz * 0.5; B.vx -= rv * nx * 0.5; B.vz -= rv * nz * 0.5; }
-      if (rv < -4 && (A.isPlayer || B.isPlayer) && A.crashCd <= 0 && B.crashCd <= 0) {
-        A.shake = B.shake = clamp(-rv / 20, 0.25, 0.6); A.crashCd = B.crashCd = 0.4;
-        burst((A.x + B.x) / 2, 0.8, (A.z + B.z) / 2, 8, 1, 0.9, 0.5);
-        sfx.bump();
-      }
+      if (rv < -1.5 && A.crashCd <= 0 && B.crashCd <= 0) bump(A, B, nx, nz, -rv);
     }
   }
 
