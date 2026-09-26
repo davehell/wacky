@@ -3,18 +3,15 @@ import { $, store } from './util.js';
 /* ================= Music ================= */
 // Cheerful background tunes, synthesised on the fly. Every song has a fixed theme (A) and parts that are
 // composed afresh from a seed on every pass round the loop, so the music keeps its tune but never just repeats.
-const MAJOR = [0, 2, 4, 5, 7, 9, 11], DORIAN = [0, 2, 3, 5, 7, 9, 10];
+const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 // root: MIDI note of the key; A/B: chord roots as scale degrees, one per bar; lead: the melody's voice
 const SONGS = {
   menu: { bpm: 100, root: 60, scale: MAJOR, A: [0, 5, 3, 4], B: [3, 4, 0, 5], form: ['A', 'B'], lead: 'flute', drums: 'soft', seed: 11 },
-  sunny: { bpm: 126, root: 57, scale: MAJOR, A: [0, 4, 5, 3], B: [3, 0, 4, 4], form: ['A', 'V', 'B', 'V'], lead: 'chip', drums: 'pop', seed: 3 },
-  snow: { bpm: 112, root: 65, scale: MAJOR, A: [0, 5, 3, 4], B: [5, 3, 0, 4], form: ['A', 'V', 'B', 'A'], lead: 'bell', drums: 'soft', seed: 7 },
-  desert: { bpm: 120, root: 62, scale: DORIAN, A: [0, 6, 3, 0], B: [3, 4, 6, 4], form: ['A', 'V', 'B', 'V'], lead: 'pluck', drums: 'shaker', seed: 5 },
   podium: { bpm: 132, root: 60, scale: MAJOR, A: [0, 3, 4, 0], B: [5, 3, 4, 4], form: ['A', 'B'], lead: 'chip', drums: 'pop', seed: 19 },
 };
 
 let AC = null, bus = null, noise = null, on = store.get('dk-music') !== '0';
-let song = null, nextT = 0, step = 0, loop = 0, tempo = 1, parts = null;
+let song = null, nextT = 0, step = 0, loop = 0, parts = null;
 // a few decibels under the sound effects, so it stays in the background
 const LEVEL = 0.3;
 
@@ -66,13 +63,11 @@ function phrase(s, chords, r) {
   });
   return notes;
 }
-// the whole song for one pass: the theme stays, the variation (V) and the bridge (B) are new each time
+// the whole song for one pass: the theme stays, the bridge (B) is new each time
 function compose(s, pass) {
   const theme = phrase(s, s.A, rng(s.seed));
   return s.form.map((part) => {
     if (part === 'A') return { chords: s.A, mel: theme };
-    // every other pass the variation gets a second voice a third below
-    if (part === 'V') return { chords: s.A, mel: phrase(s, s.A, rng(s.seed * 97 + pass * 13 + 1)), harmony: pass % 2 === 1 };
     return { chords: s.B, mel: phrase(s, s.B, rng(s.seed * 31 + pass * 7 + 2)), bridge: true };
   });
 }
@@ -104,14 +99,6 @@ const LEADS = {
     lfo.connect(lg).connect(o.frequency); lfo.start(t); lfo.stop(t + dur + 0.15);
     osc('triangle', f * 2, t, dur, env(t, dur, 0.012, 0.05));
   },
-  // glockenspiel for the snow
-  bell(t, f) { osc('sine', f, t, 1.2, env(t, 1.2, 0.07, 0.004)); osc('sine', f * 4.01, t, 0.4, env(t, 0.4, 0.02, 0.002)); },
-  // a plucked string for the desert
-  pluck(t, f, dur) {
-    const g = env(t, Math.min(0.6, dur + 0.25), 0.07, 0.004);
-    const l = AC.createBiquadFilter(); l.type = 'lowpass'; l.frequency.setValueAtTime(3200, t); l.frequency.exponentialRampToValueAtTime(500, t + 0.35); l.connect(g);
-    osc('sawtooth', f, t, 0.6, l); osc('triangle', f, t, 0.6, g);
-  },
 };
 function bass(t, f, dur) { osc('triangle', f, t, dur, env(t, dur, 0.13, 0.01)); osc('sine', f * 2, t, dur, env(t, dur * 0.6, 0.02)); }
 function pad(t, f, dur) { const g = env(t, dur, 0.018, 0.02); osc('square', f, t, dur, lowpass(1400, g)); }
@@ -132,17 +119,12 @@ const DRUMS = {
     if (i % 16 === 0) kick(t);
     if (i % 4 === 2) hit(t, 'highpass', 6500, 0.05, 0.018);
   },
-  shaker(t, i) {
-    if (i % 8 === 0) kick(t);
-    hit(t, 'bandpass', 5500, 0.05, i % 4 === 2 ? 0.03 : 0.012, 1.5);
-    if (i % 16 === 10) hit(t, 'bandpass', 900, 0.08, 0.04, 2);
-  },
 };
 
 /* ---------- Scheduler ---------- */
 function schedule() {
   if (!song) return;
-  const s = SONGS[song], sixteenth = 60 / (s.bpm * tempo) / 4;
+  const s = SONGS[song], sixteenth = 60 / s.bpm / 4;
   while (nextT < AC.currentTime + 0.15) {
     const barsPerPart = 4, partLen = barsPerPart * 16, total = parts.length * partLen;
     const pi = Math.floor(step / partLen), part = parts[pi], i = step % partLen, bar = Math.floor(i / 16), b16 = i % 16;
@@ -151,7 +133,6 @@ function schedule() {
     for (const n of part.mel) {
       if (n.at !== i) continue;
       LEADS[s.lead](t, hz(deg(s, n.d)), n.len * sixteenth * 0.9);
-      if (part.harmony) LEADS[s.lead](t, hz(deg(s, n.d - 2)), n.len * sixteenth * 0.9);
     }
     // bass on the beat, with a step up at the end of a bar
     if (b16 % 4 === 0) bass(t, hz(low(deg(s, chord + (b16 === 12 && bar === 3 ? 4 : 0)))), sixteenth * (b16 === 0 ? 3 : 2));
@@ -176,7 +157,7 @@ function initMusic(ctx, out, noiseBuf) {
 // Starts a song from the top (or keeps playing it if it is already on)
 function playSong(id) {
   if (!AC || song === id) return;
-  song = id; step = 0; loop = 0; tempo = 1;
+  song = id; step = 0; loop = 0;
   parts = compose(SONGS[id], 0);
   nextT = AC.currentTime + 0.1;
   bus.gain.cancelScheduledValues(AC.currentTime);
@@ -187,10 +168,6 @@ function stopSong(fade = 0.3) {
   song = null;
   bus.gain.setTargetAtTime(0, AC.currentTime, fade);
 }
-// the last lap goes a little faster
-function setTempo(mul) { tempo = mul; }
-// quieter while paused
-function duckMusic(duck) { if (AC && song) bus.gain.setTargetAtTime(on ? (duck ? LEVEL * 0.3 : LEVEL) : 0, AC.currentTime, 0.1); }
 function drawMusicIcon() {
   $('#musicIcon').innerHTML = '<path d="M7 14.5V4l9-2v10.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="5" cy="14.5" r="2.5" fill="currentColor"/><circle cx="14" cy="12.5" r="2.5" fill="currentColor"/>' +
     (on ? '' : '<path d="M2 2l16 16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>');
@@ -203,4 +180,4 @@ function toggleMusic() {
 }
 drawMusicIcon();
 
-export { initMusic, playSong, stopSong, setTempo, duckMusic, toggleMusic };
+export { initMusic, playSong, stopSong, toggleMusic };

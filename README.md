@@ -27,10 +27,13 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
   se vyplatí hlavně s turbem
 - pohár: všechny tři tratě za sebou, body za umístění (10, 8, 6, 4, 2, 1) a zlatý, stříbrný
   nebo bronzový pohár na konci
-- jezdci reagují: po zásahu jim kolem hlavy krouží hvězdičky, střelec zavolá „Jupí!“, soupeř,
-  který tě předjede, se ohlédne a zamává „Pa pa!“, a ten, koho předjedeš, řekne „Jejda!“
+- jezdci reagují hlasem a pohybem hlavy: střelec se zaraduje, soupeř, který tě předjede, se
+  ohlédne a zamává, a ten, koho předjedeš, se zarazí
+- zasaženému jezdci chvíli krouží kolem hlavy hvězdičky; když zasáhnou tebe, obraz se zatřese
+  a zakolébá, okraje obrazovky zablikají, zacinkají hvězdičky a tablet krátce zavibruje
 - v cíli pódium pro první tři: každé zvíře slaví po svém, padají konfety a vítěz poháru dostane
   zlatý pohár
+- v posledním kole zamává uprostřed obrazovky šachovnicová vlajka (hra se obejde bez čtení)
 - drift s turbem (modré a oranžové jiskry), raketový start
 - ježci na trati jako v původní hře: přejetím je sebereš (až 10) a pak je házíš — kutálí se za soupeřem
   před tebou; každý ježek zrovna něco dělá (sedí na záchodě, čte noviny, spí, hraje na kytaru…)
@@ -40,8 +43,8 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
   a chvíli na něj prší, takže zpomalí)
 - třídy 50 / 100 / 150 cc a dětský režim, minimapa, osobní rekordy
 - syntetizovaný zvuk motoru s řazením, motory soupeřů s dopplerovým efektem
-- veselá hudba, která se skládá přímo ve hře: každá trať, menu i pódium mají svou melodii, hlavní
-  motiv zůstává a ostatní části se při každém opakování trochu obmění; v posledním kole zrychlí
+- veselá hudba v menu a na pódiu, která se skládá přímo ve hře: hlavní motiv zůstává a prostřední
+  část se při každém opakování trochu obmění; během jízdy hudba nehraje
 - ovládání klávesnicí, gamepadem i dotykem
 
 ## Ovládání

@@ -89,9 +89,40 @@ function whoosh(at, dur, type, f0, f1, vol, q = 1) {
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   s.connect(f).connect(g).connect(sfxBus); s.start(t); s.stop(t + dur + 0.05);
 }
+// One sung syllable of a cartoon voice: a buzzy tone gliding from f0 to f1 through two formant filters
+// that morph from one vowel to another, so it sounds like a little "ju", "pa" or "au" rather than a beep
+const VOWELS = { a: [800, 1250], e: [520, 1850], i: [320, 2300], o: [480, 900], u: [330, 820] };
+function syllable(at, dur, f0, f1, from, to, vol) {
+  if (!AC) return;
+  const t = AC.currentTime + at, o = AC.createOscillator(), g = AC.createGain();
+  o.type = 'sawtooth'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  // a gentle vibrato makes it sound alive
+  const lfo = AC.createOscillator(), lg = AC.createGain(); lfo.frequency.value = 7; lg.gain.value = f0 * 0.025;
+  lfo.connect(lg).connect(o.frequency); lfo.start(t); lfo.stop(t + dur + 0.05);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.03);
+  g.gain.setValueAtTime(vol, t + dur * 0.7);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  const [a1, a2] = VOWELS[from], [b1, b2] = VOWELS[to];
+  [[a1, b1, 1], [a2, b2, 0.5]].forEach(([fa, fb, w]) => {
+    const f = AC.createBiquadFilter(), fg = AC.createGain();
+    f.type = 'bandpass'; f.Q.value = 5; f.frequency.setValueAtTime(fa, t); f.frequency.linearRampToValueAtTime(fb, t + dur);
+    fg.gain.value = w * 2.5;
+    o.connect(f).connect(fg).connect(g);
+  });
+  g.connect(sfxBus); o.start(t); o.stop(t + dur + 0.05);
+}
 const sfx = {
   pickup: () => { note(1047, 0, 0.16, 'triangle', 0.07); note(1319, 0.06, 0.16, 'triangle', 0.07); note(1568, 0.12, 0.22, 'triangle', 0.07); },
-  hit: () => { note(300, 0, 0.3, 'sine', 0.25, 90); whoosh(0, 0.3, 'bandpass', 1600, 300, 0.25, 1.2); note(880, 0.05, 0.12, 'triangle', 0.05, 440); },
+  // the player is hit: a comic "bonk" and a springy "boing", in the middle range that small
+  // tablet speakers play well, over a soft thump
+  hit: () => {
+    note(300, 0, 0.3, 'sine', 0.2, 90);
+    note(900, 0, 0.12, 'square', 0.06, 450); note(700, 0, 0.18, 'triangle', 0.24, 350);
+    whoosh(0, 0.3, 'bandpass', 1600, 300, 0.22, 1.2);
+    const b = [520, 390, 470, 350, 420, 320];
+    b.forEach((f, i) => note(f, 0.12 + i * 0.06, 0.09, 'triangle', 0.22 - i * 0.025, b[i + 1] || 280));
+  },
   boost: () => { whoosh(0, 0.5, 'bandpass', 500, 3000, 0.3, 1.4); note(330, 0, 0.35, 'triangle', 0.06, 660); },
   // a hedgehog curls up and rolls away: a springy "boing" and a happy squeak
   throwHog: () => { whoosh(0, 0.22, 'bandpass', 2200, 600, 0.14, 2); note(330, 0, 0.18, 'triangle', 0.09, 660); note(1175, 0.08, 0.14, 'triangle', 0.04, 1760); },
@@ -107,6 +138,16 @@ const sfx = {
     note(196, 0, 0.4, 'triangle', 0.06, 392);
   },
   // an opponent the player has hit: a comic "bonk" and a little fanfare
+  // the dizzy stars twinkling round the head: soft little chimes swooping up and down (vol: loudness)
+  dizzy: (vol = 1) => {
+    [1568, 2093, 1760, 2349, 1976, 2637].forEach((f, i) => note(f, 0.25 + i * 0.22, 0.2, 'sine', 0.045 * vol, i % 2 ? f * 0.8 : f * 1.2));
+    note(523, 0.2, 0.9, 'triangle', 0.04 * vol, 392);
+  },
+  // the last lap: the flag flaps and a bright little "ta-da-daa" rings out
+  lastLap: () => {
+    for (let i = 0; i < 4; i++) whoosh(i * 0.12, 0.1, 'bandpass', 1400, 700, 0.05, 1.5);
+    [784, 988, 1175].forEach((f, i) => note(f, 0.1 + i * 0.13, i === 2 ? 0.5 : 0.14, 'triangle', 0.09));
+  },
   score: () => { note(620, 0, 0.14, 'sine', 0.13, 310); note(988, 0.12, 0.12, 'triangle', 0.06); note(1319, 0.2, 0.2, 'triangle', 0.06); },
   // the extra layer on top of `hit` telling what it was
   hitBy: (kind) => {
@@ -138,11 +179,13 @@ const sfx = {
     else { note(1568, 0, 0.16, 'triangle', 0.07); note(2093, 0.06, 0.16, 'triangle', 0.06); note(2637, 0.12, 0.3, 'triangle', 0.05); }
   },
   // a driver's little voice: "yippee", "bye-bye", "oops" or "ouch", pitched to suit the animal
-  voice: (kind, p = 1) => {
-    if (kind === 'cheer') { note(660 * p, 0, 0.12, 'triangle', 0.06, 880 * p); note(880 * p, 0.12, 0.22, 'triangle', 0.06, 1320 * p); }
-    else if (kind === 'bye') { note(784 * p, 0, 0.15, 'triangle', 0.05, 740 * p); note(587 * p, 0.2, 0.24, 'triangle', 0.05, 554 * p); }
-    else if (kind === 'oops') note(740 * p, 0, 0.32, 'triangle', 0.06, 370 * p);
-    else { note(900 * p, 0, 0.1, 'sine', 0.06, 1200 * p); note(1100 * p, 0.08, 0.14, 'sine', 0.05, 700 * p); }
+  // "ju-chůů!", "pa-pa!", "jej-da!" or "au!" without words, just the tune and the vowels
+  voice: (kind, p = 1, vol = 0.07) => {
+    const f = 300 * p;
+    if (kind === 'cheer') { syllable(0, 0.16, f, f * 1.2, 'i', 'u', vol); syllable(0.18, 0.42, f * 1.3, f * 1.9, 'u', 'u', vol); }
+    else if (kind === 'bye') { syllable(0, 0.18, f * 1.4, f * 1.3, 'a', 'a', vol); syllable(0.24, 0.32, f * 1.2, f * 0.95, 'a', 'a', vol); }
+    else if (kind === 'oops') { syllable(0, 0.18, f * 1.5, f * 1.4, 'i', 'e', vol); syllable(0.2, 0.38, f * 1.3, f * 0.8, 'a', 'a', vol); }
+    else syllable(0, 0.45, f * 1.7, f * 1.0, 'a', 'u', vol);
   },
   // the podium: soft applause and cheering, with a little fanfare when the player is on it
   cheer: (fanfare) => {

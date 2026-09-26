@@ -2,12 +2,12 @@ import * as THREE from 'three';
 import { $, clamp, rnd, wrapA, store, hex } from './util.js';
 import { stage, renderer, scene, camera, sky, sun } from './render.js';
 import { N, W, LIM, LAPS, CUT_W, P, T, S, SEG, TRACKS, SURF, cutPts, headingAt, nearest, cutAt, rampLift, surfaceAt, loadTrack, currentTrack, updateScenery } from './track.js';
-import { CHARS, makeKart, makePortraits, speechTexture } from './characters.js';
+import { CHARS, makeKart, makePortraits } from './characters.js';
 import { ICONS, ITEM_NAMES, boxes, BOX_ROWS, placeBoxes, makeHog, makeFireball, animateFireball, makeIceCream, makeBubble, makeMagnet, makeRainCloud } from './items.js';
 import { MAX_HOGS, hedgehogSpots, placeHedgehogs, pullHedgehogs, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
 import { parts, emit, updateParticles, burst } from './particles.js';
 import { showPodium, hidePodium, podiumOn, updatePodium, podiumCamera } from './podium.js';
-import { playSong, stopSong, setTempo, duckMusic, toggleMusic } from './music.js';
+import { playSong, stopSong, toggleMusic } from './music.js';
 import { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
 /* ================= Game state ================= */
@@ -17,7 +17,7 @@ const DRIFT_MINI = 0.5, DRIFT_BIG = 1.2;
 const ICE_FLIGHT = 0.9;
 // how long a bubble, a magnet and a rain shower last
 const BUBBLE_T = 10, MAGNET_T = 6, RAIN_T = 4;
-// how long a reaction (a speech bubble and a head gesture) lasts, and how often a driver may react
+// how long a reaction (a voice and a head gesture) lasts, and how often a driver may react
 const REACT_T = 1.6, REACT_GAP = 2.5, PASS_GAP = 6;
 const AI_MAX_HOGS = 3, AI_SHOT_GAP = 4.5, SAFE_AFTER_HIT = 2.2;
 const CC = [
@@ -62,7 +62,6 @@ function resetKart(k, slot) {
   k.ai.itemT = 0;
   k.ai.hogT = rnd(8, 12);
   k.kid = false;
-  k.v.say.visible = false;
   syncKart(k, 0);
 }
 function placeGrid() {
@@ -86,17 +85,14 @@ function syncKart(k, dt) {
   v.body.position.set(Math.sin(gTime * 57) * 0.14 * sh, Math.abs(Math.sin(gTime * 41)) * 0.1 * sh, 0);
   v.body.rotation.x = Math.sin(gTime * 47) * 0.09 * sh;
   v.head.rotation.set(0, -k.st * 0.25, k.st * 0.18);
-  // a reaction: the speech bubble pops up, and the head cheers, looks back or shakes
+  // a reaction: the head cheers, looks back or shakes
   if (k.react) {
     const t = (k.reactT += dt), e = Math.sin(clamp(t / REACT_T, 0, 1) * Math.PI);
     if (k.react === 'cheer') v.head.rotation.x = Math.sin(t * 18) * 0.2 * e;
     else if (k.react === 'bye') v.head.rotation.y += k.lookSide * 1.1 * e;
     else if (k.react === 'oops') v.head.rotation.y += Math.sin(t * 22) * 0.35 * e;
     else v.head.rotation.z += Math.sin(t * 16) * 0.3 * e;
-    const pop = Math.min(1, t * 7);
-    v.say.scale.set(2.6 * pop, 1.46 * pop, 1);
-    v.say.material.opacity = clamp((REACT_T - t) / 0.3, 0, 1);
-    if (t >= REACT_T) { k.react = null; v.say.visible = false; }
+    if (t >= REACT_T) k.react = null;
   }
   // dizzy after a hit: stars circle the head and it wobbles
   v.stars.visible = k.dizzy > 0;
@@ -372,8 +368,6 @@ function react(k, kind) {
   k.react = kind; k.reactT = 0; k.reactCd = REACT_GAP;
   // which way to look back: towards the player
   k.lookSide = Math.sign((player.x - k.x) * Math.cos(k.h) - (player.z - k.z) * Math.sin(k.h)) || 1;
-  k.v.say.material.map = speechTexture(kind);
-  k.v.say.visible = true;
   if (Math.hypot(k.x - player.x, k.z - player.z) < 35) sfx.voice(kind, k.ch.voice);
 }
 function hitKart(k, by, kind) {
@@ -385,8 +379,13 @@ function hitKart(k, by, kind) {
   k.dizzy = k.spin + 1.2;
   if (!k.isPlayer) react(k, 'ouch');
   if (by && by !== k) react(by, 'cheer');
-  if (k.isPlayer) { showMsg('Au!'); sfx.hit(); sfx.hitBy(kind); }
-  else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); }
+  if (k.isPlayer) {
+    showMsg('Au!'); sfx.hit(); sfx.hitBy(kind); sfx.dizzy();
+    // the whole picture wobbles, the screen edges flash and a tablet gives a little buzz
+    camHit = 1;
+    hitFlash.classList.remove('on'); void hitFlash.offsetWidth; hitFlash.classList.add('on');
+    if (navigator.vibrate) navigator.vibrate([70, 50, 90]);
+  } else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); sfx.dizzy(0.5); }
 }
 
 function popBubble(k) {
@@ -511,7 +510,15 @@ let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1, lastDrift = 0;
   $('#hogIcon').innerHTML = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
 }
 function showMsg(t, dur = 1.3) { el.msg.textContent = t; el.msg.classList.remove('pop'); void el.msg.offsetWidth; el.msg.classList.add('pop'); el.msg.hidden = false; msgTimer = dur; }
-const itemPop = $('#itemPop');
+const itemPop = $('#itemPop'), hitFlash = $('#hitFlash'), flag = $('#flag');
+let flagTimer = 0;
+// the last lap: children cannot read yet, so a waving chequered flag says it instead of words
+function waveFlag() {
+  flag.hidden = true; void flag.offsetWidth; flag.hidden = false;
+  clearTimeout(flagTimer);
+  flagTimer = setTimeout(() => { flag.hidden = true; }, 2600);
+  sfx.lastLap();
+}
 let itemPopTimer = 0;
 function showItemPop(it) {
   $('#itemPopIcon').innerHTML = ICONS[it];
@@ -702,7 +709,7 @@ function clearField() {
 }
 function startRace() {
   initAudio();
-  // quiet during the countdown, so the beeps are clear
+  // the music plays in the menu and on the podium, never during the race
   stopSong(0.15);
   hidePodium();
   setGearBase(CC[cls()].base);
@@ -713,9 +720,9 @@ function startRace() {
   for (const q of parts) q.life = 0;
   finishCount = 0; raceTime = 0; aiShotT = 0; cdT = 3.6; cdShown = null; launchAt = null; doneT = 0;
   state = 'countdown'; paused = false;
-  camH = player.h;
+  camH = player.h; camHit = 0;
   lastHud = {}; lastSlot = '-'; lastHogs = -1; lastDrift = 0;
-  el.msg.hidden = true; el.cd.hidden = true; itemPop.hidden = true;
+  el.msg.hidden = true; el.cd.hidden = true; itemPop.hidden = true; flag.hidden = true;
   show('#menu', false); show('#results', false); show('#pause', false); show('#hud', true); show('#touch', isTouch);
   requestAnimationFrame(setupMini);
 }
@@ -742,7 +749,6 @@ function togglePause() {
   if (state !== 'race' && state !== 'countdown') return;
   paused = !paused;
   show('#pause', paused);
-  duckMusic(paused);
   if (paused) { silenceEngine(); $('#resumeBtn').focus(); }
 }
 $('#startBtn').addEventListener('click', start);
@@ -821,7 +827,7 @@ function resize() {
 }
 
 /* ================= Main loop ================= */
-let camH = 0;
+let camH = 0, camHit = 0;
 const camTarget = new THREE.Vector3(), camLook = new THREE.Vector3();
 
 function simulate(dt) {
@@ -834,7 +840,6 @@ function simulate(dt) {
     if (cdT > 0 && n <= 3 && n !== cdShown) { cdShown = n; el.cd.textContent = n; el.cd.hidden = false; el.cd.classList.remove('pop'); void el.cd.offsetWidth; el.cd.classList.add('pop'); sfx.beep(); }
     if (cdT <= 0) {
       state = 'race'; sfx.go();
-      playSong(currentTrack().id); setTempo(1);
       el.cd.textContent = 'Jeď!'; el.cd.classList.remove('pop'); void el.cd.offsetWidth; el.cd.classList.add('pop');
       setTimeout(() => { el.cd.hidden = true; }, 800);
       if (launchAt !== null && launchAt < 0.75) { player.boost = 1.2; showMsg('Raketový start!'); sfx.boost(); }
@@ -867,13 +872,10 @@ function simulate(dt) {
     if (k.shake > 0) k.shake = Math.max(0, k.shake - dt * 2.5);
     const lapBefore = k.lap;
     stepKart(k, inp, dt);
-    if (k.isPlayer && k.lap > lapBefore && k.lap < LAPS && k.lap > 0) {
-      showMsg(k.lap === LAPS - 1 ? 'Poslední kolo!' : `Kolo ${k.lap + 1}`);
-      if (k.lap === LAPS - 1) setTempo(1.08);
-    }
+    if (k.isPlayer && k.lap > lapBefore && k.lap === LAPS - 1) waveFlag();
     if (!k.finished && k.lap >= LAPS) {
       k.finished = true; k.finishTime = raceTime; k.place = ++finishCount;
-      if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); silenceEngine(0.4); stopSong(0.5); }
+      if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); silenceEngine(0.4); }
     }
     if (k.kid && !k.finished) rescueKid(k, dt);
     if (k.isPlayer && !k.finished) {
@@ -1079,10 +1081,13 @@ function updateCamera(dt) {
   const back = k.ch.camBack || 8.8, up = k.ch.camUp || 3.7;
   camTarget.set(k.x - Math.sin(camH) * back, k.y + up, k.z - Math.cos(camH) * back);
   camera.position.lerp(camTarget, 1 - Math.exp(-(state === 'countdown' ? 3 : 10) * dt));
-  const sh = k.shake * k.shake * 0.3;
+  // after a hit on the player the camera shakes harder and rocks from side to side for a moment
+  camHit = Math.max(0, camHit - dt * 1.4);
+  const sh = k.shake * k.shake * 0.3 + camHit * camHit * 0.5;
   camera.position.x += Math.sin(gTime * 61) * sh; camera.position.y += Math.sin(gTime * 53) * sh * 0.6;
   camLook.set(k.x + Math.sin(camH) * 5, k.y + 1.5, k.z + Math.cos(camH) * 5);
   camera.lookAt(camLook);
+  if (camHit > 0) camera.rotateZ(Math.sin(gTime * 14) * 0.07 * camHit);
   const fov = 64 + clamp(Math.abs(k.speed) / 40, 0, 1.4) * 8 + (k.boost > 0 ? 7 : 0);
   camera.fov += (fov - camera.fov) * Math.min(1, dt * 4);
   camera.updateProjectionMatrix();
