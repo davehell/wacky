@@ -12,6 +12,7 @@ import { initAudio, sfx, setEngine, updateOpponents, silenceEngine, toggleMute }
 // Opponents carry only a few hedgehogs and take turns at the player, so a leader is never pelted non-stop
 // Drift charge levels for the small and the big turbo, reachable within one ordinary bend
 const DRIFT_MINI = 0.5, DRIFT_BIG = 1.2;
+const ICE_FLIGHT = 0.9;
 const AI_MAX_HOGS = 2, AI_SHOT_GAP = 4.5, SAFE_AFTER_HIT = 2.2;
 const CC = [
   { base: 30, ai: 0.9, label: '50 cc', in: 'v 50 cc' },
@@ -255,11 +256,10 @@ function useItem(k) {
     if (k.isPlayer) sfx.fire();
   }
   if (it === 'icecream') {
-    const fx = Math.sin(k.h), fz = Math.cos(k.h);
+    // lobbed in a high arc onto the road ahead, where everyone can see it land
     const m = makeIceCream();
-    const x = k.x - fx * 3.2, z = k.z - fz * 3.2;
-    m.position.set(x, 0, z); m.rotation.y = rnd(0, 6);
-    hazards.push({ x, z, life: 30, m });
+    m.userData.splat.visible = false;
+    projectiles.push({ kind: 'ice', idx: (k.idx + 2) % N, f: 0, lat: k.lat, speed: Math.max(46, k.speed + 20), owner: k, life: ICE_FLIGHT, age: 0, target: null, mesh: m });
     if (k.isPlayer) sfx.throw();
   }
 }
@@ -590,6 +590,22 @@ function simulate(dt) {
       if (ahead < 90) pr.lat += clamp(pr.target.lat - pr.lat, -16 * dt, 16 * dt);
     }
     const fire = pr.kind === 'fire';
+    if (pr.kind === 'ice') {
+      const i0 = pr.idx, i1 = (pr.idx + 1) % N, u = pr.age / ICE_FLIGHT;
+      const x = P[i0].x + (P[i1].x - P[i0].x) * pr.f + S[i0].x * pr.lat, z = P[i0].z + (P[i1].z - P[i0].z) * pr.f + S[i0].z * pr.lat;
+      pr.mesh.position.set(x, Math.max(0, 1.2 + 7 * u * (1 - u) - 1.2 * u), z);
+      pr.mesh.rotation.y += dt * 9;
+      if (Math.random() < 0.6) emit(x, pr.mesh.position.y + 0.4, z, rnd(-1, 1), rnd(-1, 1), rnd(-1, 1), 0.97, 0.55, 0.65, 0.35);
+      if (pr.life <= 0) {
+        pr.mesh.position.y = 0;
+        pr.mesh.userData.splat.visible = true;
+        burst(x, 0.5, z, 18, 0.97, 0.6, 0.7);
+        // the thrower drives past their own ice cream
+        hazards.push({ x, z, life: 30, m: pr.mesh, owner: pr.owner, ownerSafe: 3 });
+        projectiles.splice(n, 1);
+      }
+      continue;
+    }
     if (fire) pr.lat = clamp(pr.lat + pr.latV * dt, -W - 3, W + 3);
     const i0 = pr.idx, i1 = (pr.idx + 1) % N;
     const x = P[i0].x + (P[i1].x - P[i0].x) * pr.f + S[i0].x * pr.lat, z = P[i0].z + (P[i1].z - P[i0].z) * pr.f + S[i0].z * pr.lat;
@@ -618,10 +634,10 @@ function simulate(dt) {
   // ice-cream hazards
   for (let n = hazards.length - 1; n >= 0; n--) {
     const h = hazards[n];
-    h.life -= dt;
+    h.life -= dt; h.ownerSafe -= dt;
     let hit = false;
     for (const k of karts) {
-      if (k.y > 0.4) continue;
+      if (k.y > 0.4 || (k === h.owner && h.ownerSafe > 0)) continue;
       if ((k.x - h.x) ** 2 + (k.z - h.z) ** 2 < 1.7 * 1.7) { hitKart(k, null); hit = true; break; }
     }
     if (hit || h.life <= 0) { scene.remove(h.m); hazards.splice(n, 1); }

@@ -76,6 +76,7 @@ function makeIceCream() {
   const g = new THREE.Group();
   const splat = new THREE.Mesh(new THREE.CircleGeometry(1.2, 22), std(0xf7a8b8, { roughness: 0.3 }));
   splat.rotation.x = -Math.PI / 2; splat.position.y = 0.07; splat.receiveShadow = true; g.add(splat);
+  g.userData.splat = splat;
   const cone = mesh(new THREE.ConeGeometry(0.35, 1.1, 14), std(0xe0a458, { roughness: 0.8 }));
   cone.rotation.z = Math.PI / 2.4; cone.position.set(0.3, 0.35, 0); g.add(cone);
   const scoop = mesh(new THREE.SphereGeometry(0.45, 16, 12), std(0xf7a8b8, { roughness: 0.4 })); scoop.position.set(-0.35, 0.35, 0); g.add(scoop);
