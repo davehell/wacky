@@ -39,7 +39,9 @@ function resetKart(k, slot) {
     drifting: false, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
     item: null, pending: null, rollT: 0, hogs: 1, hogCd: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
   });
-  k.ai.skill = CC[cls()].ai * rnd(0.96, 1.02);
+  // a touch slower than the player at the top speed, each with its own comfortable gap
+  k.ai.skill = CC[cls()].ai * rnd(0.93, 0.97);
+  k.ai.slack = 12 + slot * 6;
   k.ai.itemT = 0;
   k.ai.hogT = rnd(4, 8);
   k.kid = false;
@@ -201,6 +203,23 @@ function stepKart(k, inp, dt) {
   }
   if (k.boost > 0) emit(k.x - fx * 1.9, 0.75 + k.y, k.z - fz * 1.9, -fx * 8 + rnd(-1, 1), rnd(0, 2), -fz * 8 + rnd(-1, 1), 1, rnd(0.35, 0.6), 0.1, 0.25);
   if (off && Math.abs(k.speed) > 8 && Math.random() < 0.6) emit(rx, 0.4, rz, rnd(-1.5, 1.5), rnd(1, 3), rnd(-1.5, 1.5), 0.32, 0.27, 0.16, 0.6, 2);
+}
+
+// Rubber band: a player who drives well pulls ahead but only by a short lead, and after a stop the field
+// slows down so the player catches up quickly. Distances are in metres along the road.
+function paceMul(k) {
+  if (k.finished) return 1;
+  if (k.isPlayer) {
+    let lead = 0;
+    for (const o of karts) if (o !== k && !o.finished) lead = Math.max(lead, (o.prog - k.prog) * SEG);
+    return 1 + clamp((lead - 25) / 250, 0, 0.15);
+  }
+  const gap = (player.prog - k.prog) * SEG;
+  if (player.finished) return k.ai.skill;
+  // behind the player: easy-going at first so a lead is possible, then pressing harder and harder
+  if (gap > 0) return k.ai.skill + clamp((gap - k.ai.slack) / 90, 0, 0.45);
+  // ahead of the player: wait up
+  return k.ai.skill - clamp((-gap - 12) / 140, 0, 0.32);
 }
 
 function hitKart(k, by) {
@@ -483,10 +502,7 @@ function simulate(dt) {
   if (state !== 'race' && state !== 'done') return;
   raceTime += dt;
   for (const k of karts) {
-    if (!k.isPlayer) {
-      const diff = player.prog - k.prog;
-      k.mul = k.ai.skill * clamp(1 + (diff / N) * 0.35, 0.86, 1.14);
-    }
+    k.mul = paceMul(k);
     let inp;
     if (k.isPlayer && !k.finished) {
       inp = playerInput();
