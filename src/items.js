@@ -117,15 +117,79 @@ function animateFireball(g, t) {
     tg.scale.set(1 + f * 0.12, 1 + f * 0.12, 0.8 + 0.35 * Math.sin(t * 17 + tg.userData.ph * 2));
   }
 }
+// A dropped ice cream in the same cute style as the hedgehogs: a smiling scoop with sprinkles, the waffle
+// cone stuck on top upside down, sitting in a melted puddle. Local +z is the face.
+const waffleTex = canvasTex(64, 64, (g, w, h) => {
+  g.fillStyle = '#e8b064'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#b97c35'; g.lineWidth = 4;
+  for (let n = -64; n < 128; n += 16) {
+    g.beginPath(); g.moveTo(n, 0); g.lineTo(n + 64, 64); g.stroke();
+    g.beginPath(); g.moveTo(n + 64, 0); g.lineTo(n, 64); g.stroke();
+  }
+}, true);
+waffleTex.repeat.set(3, 2);
+const ICE = {
+  cream: std(0xf7a8b8, { roughness: 0.25 }),
+  melt: std(0xf28aa3, { roughness: 0.15 }),
+  waffle: new THREE.MeshStandardMaterial({ map: waffleTex, roughness: 0.8 }),
+  rim: std(0xd08f45, { roughness: 0.7 }),
+  black: std(0x1b1b22, { roughness: 0.25 }),
+  white: std(0xffffff, { roughness: 0.3 }),
+  blush: std(0xff7f9a, { roughness: 0.8 }),
+  mouth: std(0x7a2130),
+  cherry: std(0xef476f, { roughness: 0.15 }),
+  sprinkles: [0xffc93c, 0x3a86ff, 0x06b6a4, 0xffffff, 0x8338ec].map((c) => std(c, { roughness: 0.4 })),
+};
+const ICE_SPH = new THREE.SphereGeometry(1, 20, 14);
+const ICE_SPRINKLE = new THREE.CylinderGeometry(0.035, 0.035, 0.2, 6);
+const ICE_SMILE = new THREE.TorusGeometry(0.13, 0.03, 8, 16, Math.PI);
+const ICE_CONE = new THREE.ConeGeometry(0.46, 1.25, 20, 1);
+const ICE_RIM = new THREE.TorusGeometry(0.44, 0.08, 8, 24);
+const ICE_PUDDLE = (() => {
+  const sh = new THREE.Shape();
+  for (let n = 0; n <= 48; n++) {
+    const a = (n / 48) * Math.PI * 2, r = 1.2 + 0.16 * Math.sin(a * 5) + 0.08 * Math.sin(a * 3 + 1);
+    const x = Math.cos(a) * r, y = Math.sin(a) * r;
+    if (n) sh.lineTo(x, y); else sh.moveTo(x, y);
+  }
+  return new THREE.ShapeGeometry(sh);
+})();
 function makeIceCream() {
   const g = new THREE.Group();
-  const splat = new THREE.Mesh(new THREE.CircleGeometry(1.2, 22), std(0xf7a8b8, { roughness: 0.3 }));
-  splat.rotation.x = -Math.PI / 2; splat.position.y = 0.07; splat.receiveShadow = true; g.add(splat);
+  const splat = new THREE.Group();
+  const pud = new THREE.Mesh(ICE_PUDDLE, ICE.melt);
+  pud.rotation.x = -Math.PI / 2; pud.position.y = 0.05; pud.receiveShadow = true; splat.add(pud);
+  for (let n = 0; n < 6; n++) {
+    const a = n * 1.1 + 0.4, r = 1.35 + (n % 3) * 0.12;
+    const d = mesh(ICE_SPH, ICE.melt); d.position.set(Math.cos(a) * r, 0.05, Math.sin(a) * r); d.scale.set(0.14, 0.05, 0.14); splat.add(d);
+  }
+  g.add(splat);
   g.userData.splat = splat;
-  const cone = mesh(new THREE.ConeGeometry(0.35, 1.1, 14), std(0xe0a458, { roughness: 0.8 }));
-  cone.rotation.z = Math.PI / 2.4; cone.position.set(0.3, 0.35, 0); g.add(cone);
-  const scoop = mesh(new THREE.SphereGeometry(0.45, 16, 12), std(0xf7a8b8, { roughness: 0.4 })); scoop.position.set(-0.35, 0.35, 0); g.add(scoop);
-  const cherry = mesh(new THREE.SphereGeometry(0.14, 10, 8), std(0xef476f, { roughness: 0.2 })); cherry.position.set(-0.45, 0.8, 0); g.add(cherry);
+  // the scoop with its face
+  const scoop = new THREE.Group(); scoop.position.y = 0.42; g.add(scoop);
+  const ball = mesh(ICE_SPH, ICE.cream); ball.scale.set(0.62, 0.48, 0.62); scoop.add(ball);
+  // melting at the bottom
+  const base = mesh(ICE_SPH, ICE.cream); base.position.y = -0.34; base.scale.set(0.75, 0.12, 0.75); scoop.add(base);
+  for (const sx of [-1, 1]) {
+    const e = mesh(ICE_SPH, ICE.black); e.position.set(sx * 0.19, 0.08, 0.55); e.scale.set(0.075, 0.1, 0.05); scoop.add(e);
+    const hl = mesh(ICE_SPH, ICE.white); hl.position.set(sx * 0.19 + 0.025, 0.12, 0.595); hl.scale.setScalar(0.028); scoop.add(hl);
+    const b = mesh(ICE_SPH, ICE.blush); b.position.set(sx * 0.34, -0.06, 0.47); b.scale.set(0.09, 0.06, 0.03); b.rotation.y = sx * 0.6; scoop.add(b);
+  }
+  const smile = mesh(ICE_SMILE, ICE.mouth); smile.position.set(0, -0.06, 0.58); smile.rotation.z = Math.PI; scoop.add(smile);
+  for (let n = 0; n < 16; n++) {
+    // spread over the upper half of the scoop, away from the face
+    const th = n * 2.4, y = 0.15 + ((n * 37) % 16) / 16 * 0.8, r = Math.sqrt(1 - y * y);
+    const dir = new THREE.Vector3(Math.cos(th) * r, y, Math.sin(th) * r);
+    if (dir.z > 0.55 && dir.y < 0.6) continue;
+    const sp = mesh(ICE_SPRINKLE, ICE.sprinkles[n % ICE.sprinkles.length]);
+    sp.position.set(dir.x * 0.6, dir.y * 0.47, dir.z * 0.6); sp.rotation.set(n * 1.3, n * 0.7, n * 2.1);
+    scoop.add(sp);
+  }
+  // the cone upside down on top, a little crooked
+  const cone = new THREE.Group(); cone.position.set(0.05, 0.95, -0.05); cone.rotation.set(-0.25, 0, 0.18); g.add(cone);
+  const c = mesh(ICE_CONE, ICE.waffle); c.position.y = 0.55; cone.add(c);
+  const rim = mesh(ICE_RIM, ICE.rim); rim.rotation.x = Math.PI / 2; rim.position.y = -0.07; cone.add(rim);
+  const cherry = mesh(ICE_SPH, ICE.cherry); cherry.scale.setScalar(0.17); cherry.position.y = 1.25; cone.add(cherry);
   scene.add(g);
   return g;
 }

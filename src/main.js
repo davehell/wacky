@@ -664,6 +664,8 @@ function simulate(dt) {
       if (Math.random() < 0.6) emit(x, pr.mesh.position.y + 0.4, z, rnd(-1, 1), rnd(-1, 1), rnd(-1, 1), 0.97, 0.55, 0.65, 0.35);
       if (pr.life <= 0) {
         pr.mesh.position.y = 0;
+        // settles facing the karts coming up behind
+        pr.mesh.rotation.set(0, headingAt(pr.idx) + Math.PI, 0);
         pr.mesh.userData.splat.visible = true;
         burst(x, 0.5, z, 18, 0.97, 0.6, 0.7);
         if (pr.owner.isPlayer) sfx.splat();
