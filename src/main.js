@@ -22,6 +22,9 @@ const CC = [
   { base: 28, ai: 0.98, label: 'Dětský režim', in: 'v dětském režimu' },
 ];
 let ccIdx = 1, selected = 0, trackIdx = 0, kid = store.get('dk-kid') === '1';
+// the cup: all circuits in a row, points for every place; `cup` is null outside a running cup
+const CUP_POINTS = [10, 8, 6, 4, 2, 1];
+let cupMode = store.get('dk-cup') === '1', cup = null;
 const cls = () => (kid ? 3 : ccIdx);
 let state = 'menu', paused = false, raceTime = 0, cdT = 0, cdShown = null, finishCount = 0, doneT = 0, gTime = 0;
 let player = null, launchAt = null, aiShotT = 0;
@@ -95,7 +98,7 @@ addEventListener('keydown', (e) => {
   if (['Space', 'ControlLeft', 'ControlRight'].includes(e.code)) firePressed = true;
   if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
   if (e.code === 'KeyM') toggleMute();
-  if (e.code === 'Enter' && state === 'menu') startRace();
+  if (e.code === 'Enter' && state === 'menu') start();
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
@@ -523,9 +526,10 @@ function drawTrackPreview(cv, tr) {
   path(); g.strokeStyle = '#14213d'; g.lineWidth = 9; g.stroke();
   path(); g.strokeStyle = '#ffffff'; g.lineWidth = 5; g.stroke();
 }
-function selectTrack(i) {
+// remember: false while the cup goes from one circuit to the next
+function selectTrack(i, remember = true) {
   trackIdx = i;
-  store.set('dk-track', String(i));
+  if (remember) store.set('dk-track', String(i));
   loadTrack(i);
   placeBoxes();
   placeHedgehogs(BOX_ROWS.map((f) => Math.floor(N * f)));
@@ -539,6 +543,13 @@ document.querySelectorAll('#cc button').forEach((b) => b.addEventListener('click
   showBest();
 }));
 document.querySelectorAll('#mode button').forEach((b) => b.addEventListener('click', () => setKid(b.dataset.kid === '1')));
+document.querySelectorAll('#event button').forEach((b) => b.addEventListener('click', () => setCupMode(b.dataset.cup === '1')));
+function setCupMode(on) {
+  cupMode = on;
+  store.set('dk-cup', on ? '1' : '0');
+  document.querySelectorAll('#event button').forEach((x) => x.setAttribute('aria-checked', String((x.dataset.cup === '1') === on)));
+  show('#tracks', !on); show('#cupHint', on);
+}
 function setKid(on) {
   kid = on;
   store.set('dk-kid', kid ? '1' : '0');
@@ -574,7 +585,19 @@ function startRace() {
   show('#menu', false); show('#results', false); show('#pause', false); show('#hud', true); show('#touch', isTouch);
   requestAnimationFrame(setupMini);
 }
+function start() {
+  if (!cupMode) { startRace(); return; }
+  cup = { round: 0, pts: new Map(karts.map((k) => [k, 0])), last: new Map() };
+  selectTrack(0, false);
+  startRace();
+}
+function nextRound() {
+  cup.round++;
+  selectTrack(cup.round, false);
+  startRace();
+}
 function toMenu() {
+  if (cup) { cup = null; selectTrack(clamp(Number(store.get('dk-track')) || 0, 0, TRACKS.length - 1)); }
   state = 'menu'; paused = false;
   show('#hud', false); show('#results', false); show('#pause', false); show('#touch', false); show('#menu', true);
   placeGrid(); showBest(); silenceEngine();
@@ -585,11 +608,15 @@ function togglePause() {
   show('#pause', paused);
   if (paused) { silenceEngine(); $('#resumeBtn').focus(); }
 }
-$('#startBtn').addEventListener('click', startRace);
+$('#startBtn').addEventListener('click', start);
 $('#resumeBtn').addEventListener('click', togglePause);
 $('#restartBtn').addEventListener('click', startRace);
 $('#quitBtn').addEventListener('click', toMenu);
-$('#againBtn').addEventListener('click', startRace);
+$('#againBtn').addEventListener('click', () => {
+  if (!cup) startRace();
+  else if (cup.round < TRACKS.length - 1) nextRound();
+  else start();
+});
 $('#menuBtn').addEventListener('click', toMenu);
 $('#pauseBtn').addEventListener('click', togglePause);
 $('#muteBtn').addEventListener('click', toggleMute);
@@ -601,13 +628,34 @@ function showResults() {
   show('#hud', false); show('#touch', false);
   const rows = karts.map((k) => ({ k, t: k.finished ? k.finishTime : raceTime + ((LAPS * N - k.prog) * SEG) / (CC[cls()].base * 0.85), est: !k.finished }));
   rows.sort((a, b) => a.t - b.t);
-  $('#resBody').innerHTML = rows.map((r, i) =>
-    `<tr class="${r.k.isPlayer ? 'me' : ''}"><td>${i + 1}.</td><td><span class="dot" style="background:${hex(r.k.ch.kart)}"></span>${r.k.ch.name}</td><td class="${r.est ? 'est' : ''}">${r.est ? '≈ ' : ''}${fmt(r.t)}</td></tr>`).join('');
+  const name = (k) => `<span class="dot" style="background:${hex(k.ch.kart)}"></span>${k.ch.name}`;
   const place = rows.findIndex((r) => r.k.isPlayer) + 1;
-  $('#resTitle').textContent = `${place}. místo`;
   const c = CC[cls()];
   const tr = currentTrack();
+  $('#resTitle').textContent = `${place}. místo`;
   $('#resEyebrow').textContent = place === 1 ? `Vítězství · ${tr.name}` : `Cíl · ${tr.name} · ${c.label}`;
+  $('#againBtn').textContent = 'Jet znovu';
+  $('#menuBtn').textContent = 'Změnit jezdce';
+  if (cup) {
+    rows.forEach((r, i) => { cup.pts.set(r.k, cup.pts.get(r.k) + CUP_POINTS[i]); cup.last.set(r.k, i); });
+    // standings: most points first, a tie goes to whoever did better in this race
+    const table = karts.slice().sort((a, b) => cup.pts.get(b) - cup.pts.get(a) || cup.last.get(a) - cup.last.get(b));
+    const final = cup.round === TRACKS.length - 1, cupPlace = table.indexOf(player) + 1;
+    $('#resHead').innerHTML = '<tr><th></th><th>Jezdec</th><th>Závod</th><th>Body</th></tr>';
+    $('#resBody').innerHTML = table.map((k, i) =>
+      `<tr class="${k.isPlayer ? 'me' : ''}"><td>${i + 1}.</td><td>${name(k)}</td><td class="plus">+${CUP_POINTS[cup.last.get(k)]}</td><td>${cup.pts.get(k)}</td></tr>`).join('');
+    $('#resEyebrow').textContent = `Pohár · závod ${cup.round + 1} ze ${TRACKS.length} · ${tr.name}`;
+    if (final) {
+      $('#resTitle').textContent = ['Zlatý pohár!', 'Stříbrný pohár!', 'Bronzový pohár!'][cupPlace - 1] || `${cupPlace}. místo v poháru`;
+      $('#resEyebrow').textContent = `Konec poháru · v posledním závodě ${place}. místo`;
+    }
+    $('#againBtn').textContent = final ? 'Nový pohár' : 'Další závod';
+    $('#menuBtn').textContent = 'Do menu';
+  } else {
+    $('#resHead').innerHTML = '';
+    $('#resBody').innerHTML = rows.map((r, i) =>
+      `<tr class="${r.k.isPlayer ? 'me' : ''}"><td>${i + 1}.</td><td>${name(r.k)}</td><td class="${r.est ? 'est' : ''}">${r.est ? '≈ ' : ''}${fmt(r.t)}</td></tr>`).join('');
+  }
   const key = bestKey(), prev = Number(store.get(key));
   if (!prev || player.finishTime < prev) { store.set(key, String(player.finishTime)); $('#resBest').textContent = `Nový osobní rekord ${tr.in} ${c.in}!`; }
   else $('#resBest').textContent = `Osobní rekord ${tr.in} ${c.in}: ${fmt(prev)}`;
@@ -853,6 +901,7 @@ function loop(now) {
 ccIdx = clamp(Number(store.get('dk-cc') ?? 1) || 0, 0, 2);
 document.querySelectorAll('#cc button').forEach((x) => x.setAttribute('aria-checked', String(Number(x.dataset.cc) === ccIdx)));
 selectTrack(clamp(Number(store.get('dk-track')) || 0, 0, TRACKS.length - 1));
+setCupMode(cupMode);
 selectChar(clamp(Number(store.get('dk-char')) || 0, 0, CHARS.length - 1));
 setKid(kid);
 addEventListener('resize', resize);
