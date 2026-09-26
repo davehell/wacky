@@ -13,7 +13,7 @@ import { initAudio, sfx, setEngine, updateOpponents, silenceEngine, toggleMute }
 // Drift charge levels for the small and the big turbo, reachable within one ordinary bend
 const DRIFT_MINI = 0.5, DRIFT_BIG = 1.2;
 const ICE_FLIGHT = 0.9;
-const AI_MAX_HOGS = 2, AI_SHOT_GAP = 4.5, SAFE_AFTER_HIT = 2.2;
+const AI_MAX_HOGS = 3, AI_SHOT_GAP = 4.5, SAFE_AFTER_HIT = 2.2;
 const CC = [
   { base: 30, ai: 0.9, label: '50 cc', in: 'v 50 cc' },
   { base: 36, ai: 0.96, label: '100 cc', in: 've 100 cc' },
