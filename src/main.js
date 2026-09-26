@@ -110,13 +110,15 @@ document.querySelectorAll('.tbtn').forEach((b) => {
   b.addEventListener('pointerleave', off);
 });
 
-// Kids' touch pad: the finger's first touch is the centre, sliding it sideways steers, the further the harder
+// Kids' touch pad: the finger's first touch is the centre; sliding it left or right of a small dead
+// zone steers that way, like pressing an arrow key. It is a plain left/right switch, not a proportional
+// stick, so a child's imprecise finger cannot dial in a sharp, twitchy turn just by dragging further.
 {
-  const pad = $('#tpad'), knob = $('#tpadKnob'), REACH = 60;
+  const pad = $('#tpad'), knob = $('#tpadKnob'), REACH = 60, DEAD = 14;
   let id = null, x0 = 0, knobX = 0;
   const move = (e) => {
     const dx = clamp(e.clientX - x0, -REACH, REACH);
-    touch.pad = Math.abs(dx) < 6 ? 0 : dx / REACH;
+    touch.pad = Math.abs(dx) < DEAD ? 0 : Math.sign(dx);
     knob.style.transform = `translateX(${knobX + dx}px)`;
   };
   pad.addEventListener('pointerdown', (e) => {
@@ -182,7 +184,7 @@ function stepKart(k, inp, dt) {
   const base = CC[cls()].base;
   if (k.spin > 0) { k.spin -= dt; k.h += dt * 11 * k.spinDir; k.speed *= Math.pow(0.12, dt); k.drifting = false; inp = NOINPUT; }
   // kids get a slow, smooth wheel so a tap on a key never jerks the kart
-  k.st += (inp.steer - k.st) * Math.min(1, dt * (k.kid ? 3 : 10));
+  k.st += (inp.steer - k.st) * Math.min(1, dt * (k.kid ? 1.8 : 10));
   k.thr = inp.throttle;
   const off = Math.abs(k.lat) > W + 1.2;
   let maxS = base * k.mul;
@@ -209,7 +211,7 @@ function stepKart(k, inp, dt) {
     const into = k.st * k.driftDir;
     yaw = k.driftDir * (1.3 + 0.75 * into);
     if (!off) k.driftCharge += dt * (1.5 + 0.6 * Math.max(0, into));
-  } else yaw = k.st * 2.0 * (k.kid ? 0.8 : 1);
+  } else yaw = k.st * 2.0 * (k.kid ? 0.5 : 1);
   k.h -= yaw * sf * dt;
 
   const fx = Math.sin(k.h), fz = Math.cos(k.h);
