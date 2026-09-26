@@ -1,7 +1,7 @@
 // Offline cache for the installed app: the page itself is fetched fresh when there is a network and
 // falls back to the cached copy without one; everything else (hashed scripts, icons, fonts) is served
 // from the cache first and stored on the first visit.
-const CACHE = 'divoka-kola-v1';
+const CACHE = 'divoka-kola-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => {

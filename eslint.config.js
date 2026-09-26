@@ -4,7 +4,7 @@ import globals from 'globals';
 export default [
   js.configs.recommended,
   {
-    files: ['src/**/*.js'],
+    files: ['src/**/*.js', 'tools/**/*.js'],
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: globals.browser },
     rules: {
       'no-empty': ['error', { allowEmptyCatch: true }],

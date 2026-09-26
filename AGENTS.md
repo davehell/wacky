@@ -28,14 +28,16 @@ The audience is children: characters must be cute and recognisable at a glance, 
 | `src/audio.js`      | Web Audio: synthesised engine, opponents' engines with doppler, wind, skid, sfx    |
 | `src/main.js`       | game state, input, kart physics, AI, HUD, menu, main loop                          |
 | `public/`           | PWA files copied as they are: `manifest.webmanifest`, service worker `sw.js`, icons |
+| `tools/`            | dev-only pages, not part of the build: `icon.html` renders the app icon            |
 
 ## Conventions
 
-- **App icon exception.** The hedgehog icon's source is `public/icon.svg`. iOS will not take an SVG as a
-  home-screen icon, so `icon-180.png`, `icon-192.png` and `icon-512.png` are rendered from it and
-  committed. They are the only binary images in the repo. After changing the SVG, render the PNGs again
-  (for example with the preinstalled Chromium) and bump `CACHE` in `public/sw.js`, so installed apps
-  pick up the change.
+- **App icon exception.** The app icon is the game's own 3D hedgehog on the toilet, rendered by the
+  dev-only page `tools/icon.html?size=N` (`toiletHedgehog()` in `src/hedgehogs.js`). Its renders
+  `public/icon-180.png`, `icon-192.png` and `icon-512.png` are committed, because an installed app needs
+  real image files; they are the only binary images in the repo. After changing the hedgehog, the
+  toilet or `tools/icon.js`, render the three PNGs again (for example by screenshotting the canvas in
+  the preinstalled Chromium) and bump `CACHE` in `public/sw.js`, so installed apps pick up the change.
 
 - **Code, comments and identifiers in English.** User-facing text (menu, HUD) in **Czech**.
 - Colours in code go through `col(hex)` (sRGB → linear); canvas textures through `canvasTex`.
