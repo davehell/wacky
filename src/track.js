@@ -4,20 +4,25 @@ import { scene, canvasTex, std, mesh, setSkyTheme } from './render.js';
 
 /* ================= Tracks ================= */
 const N = 900, W = 15, LIM = W + 13, LAPS = 3;
+// half width of the dirt shortcut
+const CUT_W = 7;
 
 // Surfaces a kart can be on: how fast it may go, how well it grips and what it kicks up
 const SURF = {
   road: { speed: 1, grip: 1, rumble: 0, dust: null },
   off: { speed: 0.48, grip: 0.5, rumble: 1, dust: [0.32, 0.27, 0.16] },
+  dirt: { speed: 0.58, grip: 0.75, rumble: 0.5, dust: [0.45, 0.33, 0.2] },
   ice: { speed: 1, grip: 0.3, rumble: 0, dust: [0.75, 0.9, 1] },
   sand: { speed: 0.72, grip: 0.8, rumble: 0.6, dust: [0.85, 0.66, 0.4] },
 };
 
-// ctrl: the circuit's control points; zones: ice or sand patches
+// ctrl: the circuit's control points; cut: a dirt shortcut from road index a to b; ramps: jumps on the road (index and the half width they cover); zones: ice or sand patches
 const TRACKS = [
   {
     id: 'sunny', name: 'Slunečný okruh', in: 'na Slunečném okruhu',
     ctrl: [[0, 0], [150, 0], [230, 40], [252, 130], [200, 202], [110, 192], [62, 132], [0, 160], [-80, 222], [-172, 192], [-204, 100], [-152, 28], [-80, -10]],
+    cut: { a: 385, b: 520 },
+    ramps: [{ i: 772, half: 7 }],
     zones: [],
     theme: {
       sky: [0x3b8fe8, 0x9fd6fb, 0xcdeafc], fog: [320, 1500], hemi: [0xcfe8ff, 0x5d7f3c, 0.75], sun: [0xfff0d4, 1.55],
@@ -28,6 +33,8 @@ const TRACKS = [
   {
     id: 'snow', name: 'Zasněžené údolí', in: 'v Zasněženém údolí',
     ctrl: [[0, 0], [140, 0], [210, -40], [270, 10], [260, 110], [190, 150], [120, 130], [70, 180], [70, 250], [-10, 290], [-110, 260], [-165, 185], [-120, 110], [-150, 40], [-80, -10]],
+    cut: { a: 745, b: 868 },
+    ramps: [{ i: 600, half: 7 }],
     zones: [{ a: 175, b: 235, lat: [-W, W], s: 'ice' }, { a: 505, b: 560, lat: [-W, W], s: 'ice' }, { a: 30, b: 60, lat: [0, W], s: 'ice' }],
     theme: {
       sky: [0x6f9fd8, 0xc9e1f5, 0xe8f2fa], fog: [260, 1300], hemi: [0xe6f1ff, 0x9aa9bf, 0.85], sun: [0xfff6ea, 1.35],
@@ -38,6 +45,8 @@ const TRACKS = [
   {
     id: 'desert', name: 'Pouštní kaňon', in: 'v Pouštním kaňonu',
     ctrl: [[0, 0], [170, 0], [240, -60], [320, -20], [330, 80], [260, 130], [180, 110], [130, 170], [40, 230], [-60, 200], [-60, 120], [-140, 90], [-190, 20], [-120, -20]],
+    cut: { a: 235, b: 390 },
+    ramps: [{ i: 478, half: 7 }],
     zones: [{ a: 200, b: 226, lat: [1, W], s: 'sand' }, { a: 555, b: 585, lat: [-W, -1], s: 'sand' }, { a: 700, b: 728, lat: [1, W], s: 'sand' }, { a: 90, b: 112, lat: [-W, -2], s: 'sand' }],
     theme: {
       sky: [0x4a8fd6, 0xa8d4f0, 0xf6e3c4], fog: [340, 1500], hemi: [0xfff1d9, 0xb07a45, 0.8], sun: [0xffe9c4, 1.65],
@@ -51,6 +60,9 @@ const TRACKS = [
 // module that imports them sees the track that is loaded right now.
 const P = [], T = [], S = [];
 let TL = 0, SEG = 0, track = TRACKS[0];
+// the shortcut's centre line (world points), and the jumps as world-space wedges
+const cutPts = [];
+const ramps = [];
 const headingAt = (i) => Math.atan2(T[i].x, T[i].z);
 
 function nearestFull(x, z, step = 1) {
@@ -69,9 +81,31 @@ function nearest(x, z, hint) {
 const circDist = (a, b) => { const d = Math.abs(a - b) % N; return Math.min(d, N - d); };
 const inRange = (i, a, b) => (a <= b ? i >= a && i <= b : i >= a || i <= b);
 
+// Where a point is relative to the shortcut: distance from its centre line and the direction away from it
+function cutAt(x, z) {
+  if (!cutPts.length) return null;
+  let best = null;
+  for (let n = 0; n < cutPts.length - 1; n++) {
+    const a = cutPts[n], b = cutPts[n + 1], ex = b.x - a.x, ez = b.z - a.z, l2 = ex * ex + ez * ez;
+    const t = ((x - a.x) * ex + (z - a.z) * ez) / l2;
+    if ((t < 0 && n > 0) || (t > 1 && n < cutPts.length - 2)) continue;
+    const u = Math.min(1, Math.max(0, t)), px = a.x + ex * u, pz = a.z + ez * u, d = Math.hypot(x - px, z - pz);
+    if (t < -0.02 || t > 1.02) continue;
+    if (!best || d < best.d) best = { d, nx: (x - px) / (d || 1), nz: (z - pz) / (d || 1), n, t: u };
+  }
+  return best;
+}
+// Height of a jump's surface under a point (0 when there is none)
+function rampLift(x, z) {
+  for (const r of ramps) {
+    const dx = x - r.x, dz = z - r.z, u = dx * r.fx + dz * r.fz, v = dx * r.fz - dz * r.fx;
+    if (u >= 0 && u <= r.len && Math.abs(v) <= r.half) return (r.h * u) / r.len;
+  }
+  return 0;
+}
 // What a kart is driving on
-function surfaceAt(idx, lat) {
-  if (Math.abs(lat) > W + 1.2) return SURF.off;
+function surfaceAt(idx, lat, x, z) {
+  if (Math.abs(lat) > W + 1.2) { const c = cutAt(x, z); return c && c.d < CUT_W + 0.5 ? SURF.dirt : SURF.off; }
   for (const zn of track.zones) if (inRange(idx, zn.a, zn.b) && lat >= zn.lat[0] && lat <= zn.lat[1]) return SURF[zn.s];
   return SURF.road;
 }
@@ -134,6 +168,12 @@ const sandTex = canvasTex(128, 128, (g, w, h) => {
   for (let y = 8; y < h; y += 16) { g.beginPath(); for (let x = 0; x <= w; x += 8) g.lineTo(x, y + Math.sin(x / 10) * 4); g.stroke(); }
 }, true);
 const sandPatchMat = new THREE.MeshStandardMaterial({ map: sandTex, roughness: 1, transparent: true, opacity: 0.95, side: THREE.DoubleSide });
+const dirtTex = canvasTex(128, 128, (g, w, h) => {
+  g.fillStyle = '#a0764a'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 900; i++) { const v = Math.random(); g.fillStyle = v < 0.5 ? 'rgba(120,84,50,0.6)' : 'rgba(190,150,105,0.6)'; g.fillRect(Math.random() * w, Math.random() * h, 3, 3); }
+  g.fillStyle = 'rgba(95,64,38,0.55)'; g.fillRect(w * 0.26, 0, 12, h); g.fillRect(w * 0.66, 0, 12, h);
+}, true);
+const dirtMat = new THREE.MeshStandardMaterial({ map: dirtTex, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
 const checkTex = canvasTex(160, 32, (g) => { for (let x = 0; x < 20; x++) for (let y = 0; y < 4; y++) { g.fillStyle = (x + y) % 2 ? '#111' : '#fff'; g.fillRect(x * 8, y * 8, 8, 8); } });
 checkTex.magFilter = THREE.NearestFilter;
 const bannerTex = canvasTex(1024, 128, (c, w, h) => {
@@ -142,14 +182,28 @@ const bannerTex = canvasTex(1024, 128, (c, w, h) => {
   c.fillText('DIVOKÁ KOLA', w / 2, h / 2 + 4);
   c.fillStyle = '#ef476f'; c.fillRect(0, 0, w, 8); c.fillRect(0, h - 8, w, 8);
 }, false, true);
+// yellow and black chevrons on the jumps
+const rampTex = canvasTex(128, 128, (g, w, h) => {
+  g.fillStyle = '#ffc93c'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#14213d';
+  for (let n = -1; n < 3; n++) { g.beginPath(); const y = n * 48 + 20; g.moveTo(0, y + 30); g.lineTo(w / 2, y); g.lineTo(w, y + 30); g.lineTo(w, y + 52); g.lineTo(w / 2, y + 22); g.lineTo(0, y + 52); g.fill(); }
+}, true);
+const signTex = canvasTex(256, 96, (g, w, h) => {
+  g.fillStyle = '#c98b4c'; g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(120,76,40,0.5)'; for (let y = 10; y < h; y += 18) g.fillRect(0, y, w, 3);
+  g.fillStyle = '#fff8e6'; g.font = '44px Bungee, Impact, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('ZKRATKA', w / 2, h / 2 + 3);
+}, false, true);
+
 function trackFrame(i, lat = 0) {
   const g = new THREE.Group();
   g.position.set(P[i].x + S[i].x * lat, 0, P[i].z + S[i].z * lat);
   g.rotation.y = headingAt(i);
   return add(g);
 }
+const nearCut = (x, z, r) => { const c = cutAt(x, z); return c && c.d < r; };
 
-// Tyre-wall fence where it does not cross another part of the circuit
+// Tyre-wall fence where it does not cross another part of the circuit, with a gap for the shortcut
 function fence(side) {
   const pos = [], uv = [], idx = [];
   let d = 0, lastOk = false, count = 0, px = 0, pz = 0;
@@ -157,7 +211,7 @@ function fence(side) {
   for (let i = 0; i <= N; i++) {
     const k = i % N, x = P[k].x + S[k].x * off, z = P[k].z + S[k].z * off;
     const nf = nearestFull(x, z, 2);
-    const ok = circDist(nf.i, k) < 40 && nf.d > LIM - 1;
+    const ok = circDist(nf.i, k) < 40 && nf.d > LIM - 1 && !nearCut(x, z, CUT_W + 1.5);
     if (ok) {
       if (lastOk) d += Math.hypot(x - px, z - pz);
       pos.push(x, 0, z, x, 1.2, z);
@@ -177,10 +231,70 @@ function fence(side) {
   add(m);
 }
 
+function buildShortcut() {
+  // leaves and rejoins the road in the direction of travel, so there is no sharp turn at either end
+  const { a, b } = track.cut, A = P[a], B = P[b], L = A.distanceTo(B) * 0.25;
+  const curve = new THREE.CubicBezierCurve3(A, A.clone().addScaledVector(T[a], L), B.clone().addScaledVector(T[b], -L), B);
+  const len = curve.getLength(), n = Math.max(8, Math.round(len / 3));
+  cutPts.push(...curve.getSpacedPoints(n));
+  const sides = cutPts.map((p, k) => {
+    const q = cutPts[Math.min(k + 1, n)], o = cutPts[Math.max(k - 1, 0)], t = q.clone().sub(o).normalize();
+    return new THREE.Vector3(t.z, 0, -t.x);
+  });
+  // just under the road, so where the two overlap at the ends the road stays on top
+  ribbonFrom(cutPts, sides, -CUT_W, CUT_W, 0.025, 14, dirtMat, false);
+  // hay bales along both edges, off the road
+  const bale = new THREE.CylinderGeometry(0.8, 0.8, 1.6, 12).rotateZ(Math.PI / 2), baleM = std(0xe6c35c, { roughness: 0.95 });
+  for (let k = 0; k <= n; k += 2) {
+    const p = cutPts[k], s = sides[k];
+    for (const sd of [-1, 1]) {
+      const x = p.x + s.x * sd * (CUT_W + 1.6), z = p.z + s.z * sd * (CUT_W + 1.6);
+      if (nearestFull(x, z, 2).d < LIM + 1.5) continue;
+      const m = mesh(bale, baleM);
+      m.position.set(x, 0.8, z); m.rotation.y = Math.atan2(s.x, s.z);
+      add(m);
+    }
+  }
+  // a wooden arrow sign at the entrance, on the side the shortcut leaves the road
+  let k0 = 0;
+  while (k0 < n && nearestFull(cutPts[k0].x, cutPts[k0].z, 2).d < LIM + 2) k0++;
+  const e = cutPts[Math.max(0, k0 - 4)], dir = cutPts[k0 + 2].clone().sub(e).normalize();
+  const side = new THREE.Vector3(dir.z, 0, -dir.x);
+  const sign = new THREE.Group();
+  sign.position.set(e.x + side.x * (CUT_W + 3), 0, e.z + side.z * (CUT_W + 3));
+  sign.rotation.y = Math.atan2(-dir.x, -dir.z);
+  const post = mesh(new THREE.BoxGeometry(0.35, 3.4, 0.35), std(0x7a5234)); post.position.y = 1.7; sign.add(post);
+  const sm = new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.8 }), brown = std(0xa0703f);
+  const board = mesh(new THREE.BoxGeometry(4.2, 1.5, 0.2), [brown, brown, brown, brown, sm, sm]); board.position.set(0, 3.2, 0.2); sign.add(board);
+  add(sign);
+  // a jump in the middle of the shortcut
+  const mk = Math.round(n * 0.5), p = cutPts[mk], t = cutPts[mk + 1].clone().sub(cutPts[mk - 1]).normalize();
+  addRamp(p.x - t.x * 3.5, p.z - t.z * 3.5, t.x, t.z, CUT_W - 1);
+}
+
+function addRamp(x, z, fx, fz, half) {
+  const r = { x, z, fx, fz, len: 7, half, h: 1.5 };
+  ramps.push(r);
+  // a wedge: flat underneath, rising towards +z
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0); shape.lineTo(r.len, 0); shape.lineTo(r.len, r.h); shape.lineTo(0, 0.02);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: half * 2, bevelEnabled: false });
+  geo.translate(0, 0, -half); geo.rotateY(-Math.PI / 2);
+  // after rotating, x of the shape runs along +z and the extrusion along x
+  // the extruded faces (slope, back and underside) get the chevrons, the two triangular ends stay plain
+  const side = std(0x14213d, { roughness: 0.6 });
+  const top = new THREE.MeshStandardMaterial({ map: rampTex, roughness: 0.6 });
+  rampTex.repeat.set(0.25, 0.14);
+  const m = mesh(geo, [side, top]);
+  m.position.set(x, 0.02, z);
+  m.rotation.y = Math.atan2(fx, fz);
+  add(m);
+}
+
 function buildScenery(th) {
   const bb = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
   for (const p of P) { bb.minX = Math.min(bb.minX, p.x); bb.maxX = Math.max(bb.maxX, p.x); bb.minZ = Math.min(bb.minZ, p.z); bb.maxZ = Math.max(bb.maxZ, p.z); }
-  const free = (x, z, r) => nearestFull(x, z, 3).d > LIM + r && !(standPos && Math.hypot(x - standPos.x, z - standPos.z) < 30);
+  const free = (x, z, r) => nearestFull(x, z, 3).d > LIM + r && !nearCut(x, z, CUT_W + r) && !(standPos && Math.hypot(x - standPos.x, z - standPos.z) < 30);
   const spots = [];
   let guard = 0;
   while (spots.length < 520 && guard++ < 20000) {
@@ -299,6 +413,11 @@ function buildTrack(tr) {
     const m = patch(zn.a, zn.b, zn.lat[0], zn.lat[1], 0.04, zn.s === 'ice' ? 18 : 9, zn.s === 'ice' ? iceMat : sandPatchMat);
     m.renderOrder = 1;
   }
+  if (tr.cut) buildShortcut();
+  for (const r of tr.ramps) {
+    const i = r.i;
+    addRamp(P[i].x - T[i].x * 3.5, P[i].z - T[i].z * 3.5, T[i].x, T[i].z, r.half);
+  }
   fence(1); fence(-1);
 
   // start line and gantry
@@ -324,7 +443,7 @@ function buildTrack(tr) {
       const lat = sd * (LIM + 9);
       const x = P[iS].x + S[iS].x * lat, z = P[iS].z + S[iS].z * lat;
       const nf = nearestFull(x, z);
-      if (circDist(nf.i, iS) > 30) continue;
+      if (circDist(nf.i, iS) > 30 || nearCut(x, z, CUT_W + 20)) continue;
       standPos = { x, z };
       const g = trackFrame(iS, sd * (LIM + 3));
       const steps = 5, len = 34;
@@ -410,13 +529,15 @@ function loadTrack(n) {
   }
   for (const g of built.values()) g.root.visible = false;
   let b = built.get(track.id);
+  cutPts.length = ramps.length = 0;
   if (!b) {
     root = new THREE.Group();
     scene.add(root);
     buildTrack(track);
-    b = { root, standPos };
+    b = { root, cutPts: cutPts.slice(), ramps: ramps.slice(), standPos };
     built.set(track.id, b);
   } else {
+    cutPts.push(...b.cutPts); ramps.push(...b.ramps);
     standPos = b.standPos;
   }
   b.root.visible = true;
@@ -427,6 +548,6 @@ function loadTrack(n) {
 const currentTrack = () => track;
 
 export {
-  N, W, LIM, LAPS, P, T, S, TL, SEG, TRACKS, SURF,
-  headingAt, nearest, nearestFull, circDist, surfaceAt, loadTrack, currentTrack, updateScenery, clouds,
+  N, W, LIM, LAPS, CUT_W, P, T, S, TL, SEG, TRACKS, SURF, cutPts, ramps,
+  headingAt, nearest, nearestFull, circDist, cutAt, rampLift, surfaceAt, loadTrack, currentTrack, updateScenery, clouds,
 };

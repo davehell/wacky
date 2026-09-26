@@ -23,6 +23,8 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
   zrychlením a ovládáním
 - tři tratě na tři kola proti pěti soupeřům: Slunečný okruh, Zasněžené údolí s kluzkým ledem
   a sněžením a Pouštní kaňon s písečnými závějemi, které brzdí
+- skoky přes můstky na každé trati (po dopadu malé turbo) a hliněná zkratka se seníky, která
+  se vyplatí hlavně s turbem
 - pohár: všechny tři tratě za sebou, body za umístění (10, 8, 6, 4, 2, 1) a zlatý, stříbrný
   nebo bronzový pohár na konci
 - drift s turbem (modré a oranžové jiskry), raketový start

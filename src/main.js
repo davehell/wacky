@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { $, clamp, rnd, wrapA, store, hex } from './util.js';
 import { stage, renderer, scene, camera, sky, sun } from './render.js';
-import { N, W, LIM, LAPS, P, T, S, SEG, TRACKS, headingAt, nearest, surfaceAt, loadTrack, currentTrack, updateScenery } from './track.js';
+import { N, W, LIM, LAPS, CUT_W, P, T, S, SEG, TRACKS, SURF, cutPts, headingAt, nearest, cutAt, rampLift, surfaceAt, loadTrack, currentTrack, updateScenery } from './track.js';
 import { CHARS, makeKart, makePortraits } from './characters.js';
 import { ICONS, ITEM_NAMES, boxes, BOX_ROWS, placeBoxes, makeHog, makeFireball, animateFireball, makeIceCream, makeBubble, makeMagnet, makeRainCloud } from './items.js';
 import { MAX_HOGS, hedgehogSpots, placeHedgehogs, pullHedgehogs, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
@@ -48,7 +48,7 @@ function resetKart(k, slot) {
     idx: i, lap: -1, prog: -N, lat,
     x: P[i].x + S[i].x * lat, z: P[i].z + S[i].z * lat, y: 0, hopV: 0,
     h: headingAt(i), speed: 0, vx: 0, vz: 0, st: 0,
-    drifting: false, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
+    drifting: false, air: false, rampH: 0, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
     item: null, bubble: 0, magnet: 0, rain: 0, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, shake: 0, crashCd: 0, pushX: 0, pushZ: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
   });
   // a touch slower than the player at the top speed, each with its own comfortable gap
@@ -160,7 +160,10 @@ function playerInput() {
 // Kids' mode helper: a gentle pull towards the road ahead, strong when the child does not steer at all
 function kidAssist(k, steer) {
   const ti = (k.idx + 14) % N, lane = clamp(k.lat, -W * 0.55, W * 0.55);
-  const tx = P[ti].x + S[ti].x * lane, tz = P[ti].z + S[ti].z * lane;
+  let tx = P[ti].x + S[ti].x * lane, tz = P[ti].z + S[ti].z * lane;
+  // in the shortcut the pull is along the dirt track instead
+  const c = k.surf === SURF.dirt ? cutAt(k.x, k.z) : null;
+  if (c) { const q = cutPts[Math.min(c.n + 4, cutPts.length - 1)]; tx = q.x; tz = q.z; }
   const diff = wrapA(Math.atan2(tx - k.x, tz - k.z) - k.h);
   return clamp(-diff * 1.6, -1, 1) * (steer ? 0.25 : 0.7);
 }
@@ -173,7 +176,7 @@ function stepKart(k, inp, dt) {
   // kids get a slow, smooth wheel so a tap on a key never jerks the kart
   k.st += (inp.steer - k.st) * Math.min(1, dt * (k.kid ? 1.8 : 10));
   k.thr = inp.throttle;
-  const surf = surfaceAt(k.idx, k.lat), off = surf.rumble > 0;
+  const surf = surfaceAt(k.idx, k.lat, k.x, k.z), off = surf.rumble > 0;
   k.surf = surf;
   let maxS = base * k.mul * surf.speed;
   if (k.rain > 0) { k.rain -= dt; maxS *= 0.7; }
@@ -217,11 +220,28 @@ function stepKart(k, inp, dt) {
     k.pushX *= f; k.pushZ *= f;
     if (Math.abs(k.pushX) + Math.abs(k.pushZ) < 0.05) k.pushX = k.pushZ = 0;
   }
-  if (k.hopV || k.y > 0) { k.y += k.hopV * dt; k.hopV -= 24 * dt; if (k.y <= 0) { k.y = 0; k.hopV = 0; } }
+  // jumps: the kart rides up the wedge, and leaving its top edge at speed throws it into the air
+  const lift = rampLift(k.x, k.z);
+  if (lift > 0 && k.y <= lift + 0.25 && k.speed > 0) { k.y = lift; k.hopV = 0; k.rampH = lift; }
+  else {
+    if (k.rampH > 1.1 && k.speed > 12) takeOff(k);
+    k.rampH = 0;
+    if (k.hopV || k.y > 0) {
+      k.y += k.hopV * dt; k.hopV -= 24 * dt;
+      if (k.y <= 0) { k.y = 0; k.hopV = 0; if (k.air) land(k); }
+    }
+  }
 
   const i = nearest(k.x, k.z, k.idx), p = P[i], sd = S[i];
   let lat = (k.x - p.x) * sd.x + (k.z - p.z) * sd.z;
-  if (Math.abs(lat) > LIM) {
+  const c0 = Math.abs(lat) > LIM ? cutAt(k.x, k.z) : null, cut = c0 && c0.d < CUT_W + 6 ? c0 : null;
+  if (cut && cut.d > CUT_W) {
+    // inside the shortcut, but up against the hay bales along it
+    const over = cut.d - CUT_W, impact = Math.max(0, k.vx * cut.nx + k.vz * cut.nz);
+    k.x -= cut.nx * over; k.z -= cut.nz * over;
+    if (impact > 6 && k.crashCd <= 0) crash(k, clamp(impact / 25, 0.3, 1), k.x + cut.nx * 1.2, k.z + cut.nz * 1.2);
+    k.vx -= cut.nx * impact; k.vz -= cut.nz * impact; k.speed *= 0.85;
+  } else if (Math.abs(lat) > LIM && !cut) {
     const c = Math.sign(lat) * LIM;
     k.x += sd.x * (c - lat); k.z += sd.z * (c - lat); lat = c;
     const impact = Math.abs(k.vx * sd.x + k.vz * sd.z);
@@ -243,6 +263,19 @@ function stepKart(k, inp, dt) {
   if (k.boost > 0) emit(k.x - fx * 1.9, 0.75 + k.y, k.z - fz * 1.9, -fx * 8 + rnd(-1, 1), rnd(0, 2), -fz * 8 + rnd(-1, 1), 1, rnd(0.35, 0.6), 0.1, 0.25);
   const dust = surf.dust;
   if (dust && Math.abs(k.speed) > 8 && Math.random() < 0.6) emit(rx, 0.4, rz, rnd(-1.5, 1.5), rnd(1, 3), rnd(-1.5, 1.5), dust[0], dust[1], dust[2], 0.6, 2);
+}
+
+function takeOff(k) {
+  k.hopV = clamp(k.speed * 0.3, 5, 13); k.air = true; k.drifting = false;
+  if (k.isPlayer) { showMsg('Hop!', 0.8); sfx.jump(); }
+}
+// touching down after a jump: a puff of dust, a little bounce and a short turbo as a reward
+function land(k) {
+  k.air = false; k.hopV = 2.2; k.shake = Math.max(k.shake, 0.4);
+  k.boost = Math.max(k.boost, 0.45);
+  const d = k.surf && k.surf.dust ? k.surf.dust : [0.8, 0.78, 0.72];
+  for (let n = 0; n < 16; n++) emit(k.x + rnd(-1.5, 1.5), 0.3, k.z + rnd(-1.5, 1.5), rnd(-5, 5), rnd(1, 3), rnd(-5, 5), d[0], d[1], d[2], 0.6, 4);
+  if (k.isPlayer) sfx.land();
 }
 
 // Rubber band: a player who drives well pulls ahead but only by a short lead, and after a stop the field
@@ -270,7 +303,7 @@ function paceMul(k) {
 // Kids' mode: a kart that wanders far off the road, or turns round the wrong way, is put back
 // in the middle of the road after a moment, with a puff of cloud
 function rescueKid(k, dt) {
-  const lost = Math.abs(k.lat) > W + 6 || k.wrongT > 1.5;
+  const lost = (Math.abs(k.lat) > W + 6 && k.surf !== SURF.dirt) || k.wrongT > 1.5;
   k.lostT = lost && k.spin <= 0 ? (k.lostT || 0) + dt : 0;
   if (k.lostT < 1.2) return;
   burst(k.x, 1.2, k.z, 24, 1, 1, 1);
@@ -497,6 +530,15 @@ function setupMini() {
     for (let i = zn.a, first = true; ; i = (i + 1) % N, first = false) { const [x, y] = mapPt(P[i].x, P[i].z); first ? g.moveTo(x, y) : g.lineTo(x, y); if (i === zn.b) break; }
     g.strokeStyle = zn.s === 'ice' ? '#7cc8f2' : '#e0a95c'; g.lineWidth = 5 * dpr; g.stroke();
   }
+  // the shortcut as a dashed dirt path, the jumps as yellow bars
+  if (cutPts.length) {
+    g.beginPath(); cutPts.forEach((p, i) => { const [x, y] = mapPt(p.x, p.z); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.setLineDash([5 * dpr, 4 * dpr]); g.strokeStyle = '#a0764a'; g.lineWidth = 4 * dpr; g.stroke(); g.setLineDash([]);
+  }
+  for (const r of currentTrack().ramps) {
+    const i = r.i, [x0, y0] = mapPt(P[i].x - S[i].x * 9, P[i].z - S[i].z * 9), [x1, y1] = mapPt(P[i].x + S[i].x * 9, P[i].z + S[i].z * 9);
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.strokeStyle = '#ffc93c'; g.lineWidth = 3 * dpr; g.stroke();
+  }
   const [sx, sy] = mapPt(P[0].x, P[0].z);
   g.fillStyle = '#ef476f'; g.fillRect(sx - 3 * dpr, sy - 6 * dpr, 6 * dpr, 12 * dpr);
 }
@@ -567,7 +609,7 @@ function selectTrack(i, remember = true) {
   if (remember) store.set('dk-track', String(i));
   loadTrack(i);
   placeBoxes();
-  placeHedgehogs(BOX_ROWS.map((f) => Math.floor(N * f)));
+  placeHedgehogs([...BOX_ROWS.map((f) => Math.floor(N * f)), ...currentTrack().ramps.map((r) => r.i)]);
   tracksEl.querySelectorAll('.track').forEach((b, j) => b.setAttribute('aria-checked', String(j === i)));
   placeGrid(); setupMini(); showBest();
 }

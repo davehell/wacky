@@ -126,6 +126,10 @@ const sfx = {
     else { note(1568, 0, 0.16, 'triangle', 0.07); note(2093, 0.06, 0.16, 'triangle', 0.06); note(2637, 0.12, 0.3, 'triangle', 0.05); }
   },
   shift: () => whoosh(0, 0.09, 'bandpass', 2500, 1200, 0.05, 2),
+  // off a jump: a rising "whee"
+  jump: () => { note(392, 0, 0.35, 'triangle', 0.07, 784); whoosh(0, 0.4, 'bandpass', 700, 2200, 0.08, 1.2); },
+  // and back on the ground: a soft bump with a springy rebound
+  land: () => { note(140, 0, 0.18, 'sine', 0.14, 70); whoosh(0, 0.2, 'lowpass', 1200, 220, 0.1, 0.9); note(330, 0.06, 0.16, 'triangle', 0.05, 520); },
   // a soap bubble blown up round the kart: a soft rising shimmer
   bubble: () => { [659, 880, 1109, 1319].forEach((f, i) => note(f, i * 0.06, 0.3, 'sine', 0.06, f * 1.06)); whoosh(0, 0.45, 'bandpass', 600, 2400, 0.06, 2); },
   // and bursting: a light "plop"
