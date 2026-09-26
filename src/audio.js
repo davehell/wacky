@@ -114,7 +114,15 @@ function syllable(at, dur, f0, f1, from, to, vol) {
 }
 const sfx = {
   pickup: () => { note(1047, 0, 0.16, 'triangle', 0.07); note(1319, 0.06, 0.16, 'triangle', 0.07); note(1568, 0.12, 0.22, 'triangle', 0.07); },
-  hit: () => { note(300, 0, 0.3, 'sine', 0.25, 90); whoosh(0, 0.3, 'bandpass', 1600, 300, 0.25, 1.2); note(880, 0.05, 0.12, 'triangle', 0.05, 440); },
+  // the player is hit: a comic "bonk" and a springy "boing", in the middle range that small
+  // tablet speakers play well, over a soft thump
+  hit: () => {
+    note(300, 0, 0.3, 'sine', 0.2, 90);
+    note(900, 0, 0.12, 'square', 0.06, 450); note(700, 0, 0.18, 'triangle', 0.24, 350);
+    whoosh(0, 0.3, 'bandpass', 1600, 300, 0.22, 1.2);
+    const b = [520, 390, 470, 350, 420, 320];
+    b.forEach((f, i) => note(f, 0.12 + i * 0.06, 0.09, 'triangle', 0.22 - i * 0.025, b[i + 1] || 280));
+  },
   boost: () => { whoosh(0, 0.5, 'bandpass', 500, 3000, 0.3, 1.4); note(330, 0, 0.35, 'triangle', 0.06, 660); },
   // a hedgehog curls up and rolls away: a springy "boing" and a happy squeak
   throwHog: () => { whoosh(0, 0.22, 'bandpass', 2200, 600, 0.14, 2); note(330, 0, 0.18, 'triangle', 0.09, 660); note(1175, 0.08, 0.14, 'triangle', 0.04, 1760); },
