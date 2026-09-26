@@ -269,9 +269,10 @@ function throwHog(k) {
 }
 function rollItem(k) {
   const rank = karts.filter((o) => o.prog > k.prog).length + 1;
-  const pT = 0.08 + 0.09 * (rank - 1), pH = 0.46;
+  // turbo is common, and more so the further back the kart is; the rest splits evenly
+  const pT = 0.34 + 0.07 * (rank - 1);
   const r = Math.random();
-  return r < pT ? 'turbo' : r < pT + pH ? 'fire' : 'icecream';
+  return r < pT ? 'turbo' : r < pT + (1 - pT) / 2 ? 'fire' : 'icecream';
 }
 
 function aiInput(k, dt) {
