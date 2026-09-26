@@ -194,24 +194,25 @@ const puff = () => { const m = new THREE.Mesh(SPH, new THREE.MeshBasicMaterial({
 
 /* ---------- Activities ---------- */
 // Each one adds its props and pose, and returns the per-frame animation
+function toilet(c) {
+  part(c.root, BOWL, M.porcelain, 0, 0.27, -0.08, 0.42, 0.54, 0.4);
+  const seat = part(c.root, RING, M.porcelain, 0, 0.56, -0.05, 0.36); seat.rotation.x = Math.PI / 2;
+  part(c.root, BOX, M.porcelain, 0, 1.1, -0.74, 1.15, 0.95, 0.3);
+  part(c.root, CYL, M.metal, 0.38, 1.6, -0.74, 0.08, 0.05, 0.08);
+  part(c.root, CYL, M.metal, 0.8, 0.36, -0.1, 0.03, 0.72, 0.03);
+  const roll = part(c.root, CYL, M.white, 0.8, 0.66, -0.1, 0.14, 0.2, 0.14); roll.rotation.z = Math.PI / 2;
+  c.body.position.y = 0.5;
+  setArm(c, 0, -0.9, 0.15); setArm(c, 1, -0.9, 0.15);
+  const note = floater(c, sprite(NOTE_TEX, 0.4), 0.35, 1.8, 0.2, 0.45, 0);
+  return (t) => {
+    c.legs[0].rotation.x = Math.sin(t * 4) * 0.5 - 0.5;
+    c.legs[1].rotation.x = -Math.sin(t * 4) * 0.5 - 0.5;
+    c.head.rotation.z = Math.sin(t * 2) * 0.12;
+    note(t);
+  };
+}
 const ACTS = [
-  function toilet(c) {
-    part(c.root, BOWL, M.porcelain, 0, 0.27, -0.08, 0.42, 0.54, 0.4);
-    const seat = part(c.root, RING, M.porcelain, 0, 0.56, -0.05, 0.36); seat.rotation.x = Math.PI / 2;
-    part(c.root, BOX, M.porcelain, 0, 1.1, -0.74, 1.15, 0.95, 0.3);
-    part(c.root, CYL, M.metal, 0.38, 1.6, -0.74, 0.08, 0.05, 0.08);
-    part(c.root, CYL, M.metal, 0.8, 0.36, -0.1, 0.03, 0.72, 0.03);
-    const roll = part(c.root, CYL, M.white, 0.8, 0.66, -0.1, 0.14, 0.2, 0.14); roll.rotation.z = Math.PI / 2;
-    c.body.position.y = 0.5;
-    setArm(c, 0, -0.9, 0.15); setArm(c, 1, -0.9, 0.15);
-    const note = floater(c, sprite(NOTE_TEX, 0.4), 0.35, 1.8, 0.2, 0.45, 0);
-    return (t) => {
-      c.legs[0].rotation.x = Math.sin(t * 4) * 0.5 - 0.5;
-      c.legs[1].rotation.x = -Math.sin(t * 4) * 0.5 - 0.5;
-      c.head.rotation.z = Math.sin(t * 2) * 0.12;
-      note(t);
-    };
-  },
+  toilet,
   function newspaper(c) {
     part(c.root, CYL, M.wood, 0, 0.2, -0.05, 0.36, 0.4, 0.36);
     c.body.position.y = 0.36;
@@ -469,6 +470,15 @@ function resetHedgehogs() {
   }
 }
 
+// The app icon (rendered by tools/icon.html) is the hedgehog on the toilet, caught mid-song
+function toiletHedgehog() {
+  const c = makeHedgehog();
+  bag = [];
+  toilet(c)(1.1);
+  bag = null;
+  return c.root;
+}
+
 // The HUD ammo icon is a picture of the very same hedgehog that sits on the road
 function hedgehogPicture() {
   const c = makeHedgehog();
@@ -479,4 +489,4 @@ function hedgehogPicture() {
   }, 160)[0];
 }
 
-export { MAX_HOGS, spots as hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture };
+export { MAX_HOGS, spots as hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture, toiletHedgehog };
