@@ -83,6 +83,11 @@ const sfx = {
   beep: () => { note(587, 0, 0.3, 'sine', 0.16); note(1174, 0, 0.2, 'sine', 0.035); },
   go: () => { note(1175, 0, 0.6, 'sine', 0.13); note(1568, 0, 0.6, 'sine', 0.08); note(2350, 0, 0.3, 'sine', 0.02); },
   finish: () => { [784, 988, 1175, 1568].forEach((f, i) => note(f, i * 0.12, i === 3 ? 0.7 : 0.18, 'triangle', 0.09)); },
+  // a bright chime as the drift charge reaches the small (1) or the big (2) turbo
+  charge: (level) => {
+    if (level === 1) { note(1319, 0, 0.18, 'triangle', 0.06); note(1760, 0.07, 0.25, 'triangle', 0.05); }
+    else { note(1568, 0, 0.16, 'triangle', 0.07); note(2093, 0.06, 0.16, 'triangle', 0.06); note(2637, 0.12, 0.3, 'triangle', 0.05); }
+  },
   shift: () => whoosh(0, 0.09, 'bandpass', 2500, 1200, 0.05, 2),
 };
 function gearOf(v) { let g = 1; while (g < GEARS.length - 1 && v >= GEARS[g]) g++; return g; }

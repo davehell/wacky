@@ -169,7 +169,7 @@ function stepKart(k, inp, dt) {
   if (k.drifting && (!inp.drift || k.speed < 8)) {
     if (k.driftCharge > DRIFT_BIG) k.boost = Math.max(k.boost, 1.2);
     else if (k.driftCharge > DRIFT_MINI) k.boost = Math.max(k.boost, 0.65);
-    if (k.isPlayer && k.driftCharge > DRIFT_MINI) sfx.boost();
+    if (k.isPlayer && k.driftCharge > DRIFT_MINI) { sfx.boost(); showMsg(k.driftCharge > DRIFT_BIG ? 'Super turbo!' : 'Turbo!', 0.8); }
     k.drifting = false;
   }
   const sf = clamp(Math.abs(k.speed) / 7, 0, 1) * (k.speed < 0 ? -1 : 1);
@@ -314,9 +314,9 @@ function aiInput(k, dt) {
 }
 
 /* ================= HUD ================= */
-const el = { hogs: $('#hogs'), ammo: $('#ammo'), pos: $('#pos'), lap: $('#lap'), slot: $('#slot'), slotLabel: $('#slotLabel'), msg: $('#msg'), cd: $('#cd'), drift: $('#driftBar') };
+const el = { hogs: $('#hogs'), ammo: $('#ammo'), pos: $('#pos'), lap: $('#lap'), slot: $('#slot'), slotLabel: $('#slotLabel'), msg: $('#msg'), cd: $('#cd'), drift: $('#drift'), bolts: [1, 2].map((n) => $('#bolt' + n)) };
 const fmt = (t) => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(2).padStart(5, '0')}`; };
-let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1;
+let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1, lastDrift = 0;
 {
   const pic = hedgehogPicture();
   $('#hogIcon').innerHTML = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
@@ -344,8 +344,18 @@ function updateHud(dt) {
     lastSlot = slot;
   }
   const ch = player.drifting ? player.driftCharge : 0;
-  el.drift.style.width = `${clamp(ch / DRIFT_BIG, 0, 1) * 100}%`;
-  el.drift.style.background = ch > DRIFT_BIG ? '#ff8a1f' : ch > DRIFT_MINI ? '#4aa8ff' : '#d6dde8';
+  el.drift.classList.toggle('on', player.drifting);
+  const fills = [ch / DRIFT_MINI, (ch - DRIFT_MINI) / (DRIFT_BIG - DRIFT_MINI)];
+  fills.forEach((f, n) => {
+    const h = clamp(f, 0, 1) * 64, r = el.bolts[n].querySelector('rect');
+    r.setAttribute('y', String(64 - h)); r.setAttribute('height', String(h));
+  });
+  const level = ch > DRIFT_BIG ? 2 : ch > DRIFT_MINI ? 1 : 0;
+  if (level !== lastDrift) {
+    el.bolts.forEach((b, n) => b.classList.toggle('lit', level > n));
+    if (level > lastDrift) sfx.charge(level);
+    lastDrift = level;
+  }
   if (msgTimer > 0) { msgTimer -= dt; if (msgTimer <= 0) el.msg.hidden = true; }
   drawMini();
 }
@@ -439,7 +449,7 @@ function startRace() {
   finishCount = 0; raceTime = 0; aiShotT = 0; cdT = 3.6; cdShown = null; launchAt = null; doneT = 0;
   state = 'countdown'; paused = false;
   camH = player.h;
-  lastHud = {}; lastSlot = '-'; lastHogs = -1;
+  lastHud = {}; lastSlot = '-'; lastHogs = -1; lastDrift = 0;
   el.msg.hidden = true; el.cd.hidden = true;
   show('#menu', false); show('#results', false); show('#pause', false); show('#hud', true); show('#touch', isTouch);
   requestAnimationFrame(setupMini);

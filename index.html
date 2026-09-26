@@ -37,8 +37,10 @@
       <button class="icon-btn" id="muteBtn" aria-label="Zvuk"><svg viewBox="0 0 20 20" id="muteIcon"></svg></button>
     </div>
   </div>
-  <div class="hud__bl">
-    <div class="drift-meter race-only" aria-hidden="true"><i id="driftBar"></i></div>
+  <!-- drift charge: the first bolt fills up for the small turbo, the second for the big one -->
+  <div class="drift race-only" id="drift" aria-hidden="true">
+    <svg class="bolt bolt--1" id="bolt1" viewBox="0 0 64 64"><defs><clipPath id="boltClip1"><rect x="0" y="64" width="64" height="0"/></clipPath></defs><path class="bolt__back" d="M36 4 12 36h16l-6 24 30-36H35z"/><path class="bolt__fill" clip-path="url(#boltClip1)" d="M36 4 12 36h16l-6 24 30-36H35z"/><path class="bolt__line" d="M36 4 12 36h16l-6 24 30-36H35z"/></svg>
+    <svg class="bolt bolt--2" id="bolt2" viewBox="0 0 64 64"><defs><clipPath id="boltClip2"><rect x="0" y="64" width="64" height="0"/></clipPath></defs><path class="bolt__back" d="M36 4 12 36h16l-6 24 30-36H35z"/><path class="bolt__fill" clip-path="url(#boltClip2)" d="M36 4 12 36h16l-6 24 30-36H35z"/><path class="bolt__line" d="M36 4 12 36h16l-6 24 30-36H35z"/></svg>
   </div>
   <div class="hud__br"><canvas id="mini" aria-label="Mapa trati"></canvas></div>
   <div class="msg outline" id="msg"></div>
@@ -73,7 +75,7 @@
       <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>zatáčení (nebo A, D)</dd>
       <dt class="race-only"><kbd>↑</kbd> <kbd>↓</kbd></dt><dd class="race-only">plyn, brzda (nebo W, S)</dd>
       <dt><kbd>Mezerník</kbd> <kbd>Ctrl</kbd></dt><dd>střelba: nejdřív věc z krabice, jinak ježek (ježky sbíráš přejetím, max. 10)</dd>
-      <dt class="race-only"><kbd>Shift</kbd></dt><dd class="race-only">drift: drž v zatáčce, puštěním získáš turbo</dd>
+      <dt class="race-only"><kbd>Shift</kbd></dt><dd class="race-only">drift: drž v zatáčce, až se rozsvítí blesk, pusť a vyrazíš (dva blesky = velké turbo)</dd>
       <dt><kbd>Esc</kbd> <kbd>M</kbd></dt><dd>pauza, zvuk</dd>
       <dt>Gamepad</dt><dd><span class="race-only">RT plyn, LT brzda, RB drift, </span>X nebo Y střelba</dd>
     </dl>
