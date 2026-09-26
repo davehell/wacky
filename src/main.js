@@ -25,7 +25,7 @@ const projectiles = [], hazards = [];
 const karts = CHARS.map((ch) => {
   const v = makeKart(ch);
   scene.add(v.root);
-  return { ch, v, stats: ch.stats, ai: { t: 0, phase: rnd(0, 6.28), freq: rnd(0.25, 0.45), itemT: 0, hogT: 0, skill: 1 } };
+  return { ch, v, ai: { t: 0, phase: rnd(0, 6.28), freq: rnd(0.25, 0.45), itemT: 0, hogT: 0, skill: 1 } };
 });
 
 function resetKart(k, slot) {
@@ -139,16 +139,16 @@ const NOINPUT = { steer: 0, throttle: false, brake: false, drift: false };
 
 /* ================= Kart physics ================= */
 function stepKart(k, inp, dt) {
-  const s = k.stats, base = CC[cls()].base;
+  const base = CC[cls()].base;
   if (k.spin > 0) { k.spin -= dt; k.h += dt * 11 * k.spinDir; k.speed *= Math.pow(0.12, dt); k.drifting = false; inp = NOINPUT; }
   // kids get a slow, smooth wheel so a tap on a key never jerks the kart
   k.st += (inp.steer - k.st) * Math.min(1, dt * (k.kid ? 3 : 10));
   k.thr = inp.throttle;
   const off = Math.abs(k.lat) > W + 1.2;
-  let maxS = base * s.speed * k.mul;
+  let maxS = base * k.mul;
   if (off) maxS *= 0.48;
-  if (k.boost > 0) { k.boost -= dt; maxS = Math.max(maxS, base * s.speed * 1.38); k.speed += 55 * dt; }
-  else if (inp.throttle && k.speed < maxS) k.speed += 25 * s.accel * dt * (1 - 0.55 * Math.max(0, k.speed) / maxS);
+  if (k.boost > 0) { k.boost -= dt; maxS = Math.max(maxS, base * 1.38); k.speed += 55 * dt; }
+  else if (inp.throttle && k.speed < maxS) k.speed += 25 * dt * (1 - 0.55 * Math.max(0, k.speed) / maxS);
   if (inp.brake) { k.speed -= (k.speed > 0 ? 45 : 14) * dt; if (k.speed < -11) k.speed = -11; }
   if (!inp.throttle && !inp.brake && k.boost <= 0) k.speed -= Math.sign(k.speed) * Math.min(Math.abs(k.speed), 9 * dt);
   if (k.speed > maxS) k.speed -= (k.speed - maxS) * Math.min(1, 2.5 * dt);
@@ -167,9 +167,9 @@ function stepKart(k, inp, dt) {
   let yaw;
   if (k.drifting) {
     const into = k.st * k.driftDir;
-    yaw = k.driftDir * (1.3 + 0.75 * into) * s.handling;
+    yaw = k.driftDir * (1.3 + 0.75 * into);
     if (!off) k.driftCharge += dt * (0.7 + 0.5 * Math.max(0, into));
-  } else yaw = k.st * 2.0 * s.handling * (k.kid ? 0.8 : 1);
+  } else yaw = k.st * 2.0 * (k.kid ? 0.8 : 1);
   k.h -= yaw * sf * dt;
 
   const fx = Math.sin(k.h), fz = Math.cos(k.h);
@@ -370,8 +370,6 @@ function selectChar(i) {
   selected = i;
   store.set('dk-char', String(i));
   charsEl.querySelectorAll('.char').forEach((b, j) => b.setAttribute('aria-checked', String(j === i)));
-  const st = CHARS[i].stats, bar = (v) => `<div class="bar"><i style="width:${clamp((v - 0.84) / 0.3, 0.08, 1) * 100}%"></i></div>`;
-  $('#stats').innerHTML = `<span>Rychlost</span>${bar(st.speed)}<span>Zrychlení</span>${bar(st.accel)}<span>Ovládání</span>${bar(st.handling)}`;
   placeGrid();
 }
 document.querySelectorAll('#cc button').forEach((b) => b.addEventListener('click', () => {

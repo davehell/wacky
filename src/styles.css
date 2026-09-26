@@ -121,9 +121,6 @@ h2 { margin: 4px 0 -6px; font-size: 12px; font-weight: 800; letter-spacing: 0.12
 .char b { font-size: 13px; line-height: 1.15; text-align: center; }
 .face { width: 68px; height: 68px; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 50% 45%, #ffffff 0 30%, var(--kart) 75%); box-shadow: 0 3px 0 rgba(20, 33, 61, 0.25); }
 .face img { width: 100%; height: 100%; display: block; }
-.stats { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; font-size: 13px; font-weight: 600; }
-.bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
-.bar i { display: block; height: 100%; background: var(--ink); border-radius: 99px; transition: width 0.25s; }
 .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: var(--line); padding: 5px; border-radius: 14px; }
 .seg--2 { grid-template-columns: repeat(2, 1fr); }
 .hint { margin: -4px 0 0; font-size: 13px; color: var(--ink-soft); }
