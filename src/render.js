@@ -27,7 +27,8 @@ const sky = new THREE.Mesh(
 );
 scene.add(sky);
 
-scene.add(new THREE.HemisphereLight(col(0xcfe8ff), col(0x5d7f3c), 0.75));
+const hemi = new THREE.HemisphereLight(col(0xcfe8ff), col(0x5d7f3c), 0.75);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(col(0xfff0d4), 1.55);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -35,6 +36,16 @@ Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, n
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.03;
 scene.add(sun, sun.target);
+
+// Sky, fog and light of a circuit's theme
+function setSkyTheme(th) {
+  const u = sky.material.uniforms;
+  u.top.value.set(th.sky[0]); u.mid.value.set(th.sky[1]); u.bot.value.set(th.sky[2]);
+  scene.fog.color.copy(col(th.sky[2]));
+  [scene.fog.near, scene.fog.far] = th.fog;
+  hemi.color.copy(col(th.hemi[0])); hemi.groundColor.copy(col(th.hemi[1])); hemi.intensity = th.hemi[2];
+  sun.color.copy(col(th.sun[0])); sun.intensity = th.sun[1];
+}
 
 const fontTextures = [];
 function canvasTex(w, h, draw, repeat, usesFont) {
@@ -90,4 +101,4 @@ function snapshots(objects, frame, size = 192) {
   }
 }
 
-export { stage, renderer, MAX_ANISO, scene, camera, sky, sun, canvasTex, std, mesh, snapshots };
+export { stage, renderer, MAX_ANISO, scene, camera, sky, sun, canvasTex, std, mesh, snapshots, setSkyTheme };

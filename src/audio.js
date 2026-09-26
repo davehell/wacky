@@ -1,5 +1,5 @@
 import { $, clamp, store } from './util.js';
-import { W } from './track.js';
+import { initMusic } from './music.js';
 
 /* ================= Audio ================= */
 let AC = null, master = null, sfxBus = null, noiseBuf = null, eng = null, muted = store.get('dk-muted') === '1';
@@ -32,6 +32,7 @@ function initAudio() {
     noiseBuf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    initMusic(AC, master, noiseBuf);
     // An almost pure, soft hum, like an electric toy car; a slight wobble keeps it from sounding static
     const hum = AC.createPeriodicWave(new Float32Array(4), new Float32Array([0, 1, 0.12, 0.04]));
     const voice = (lpFreq) => {
@@ -136,6 +137,33 @@ const sfx = {
     if (level === 1) { note(1319, 0, 0.18, 'triangle', 0.06); note(1760, 0.07, 0.25, 'triangle', 0.05); }
     else { note(1568, 0, 0.16, 'triangle', 0.07); note(2093, 0.06, 0.16, 'triangle', 0.06); note(2637, 0.12, 0.3, 'triangle', 0.05); }
   },
+  // a driver's little voice: "yippee", "bye-bye", "oops" or "ouch", pitched to suit the animal
+  voice: (kind, p = 1) => {
+    if (kind === 'cheer') { note(660 * p, 0, 0.12, 'triangle', 0.06, 880 * p); note(880 * p, 0.12, 0.22, 'triangle', 0.06, 1320 * p); }
+    else if (kind === 'bye') { note(784 * p, 0, 0.15, 'triangle', 0.05, 740 * p); note(587 * p, 0.2, 0.24, 'triangle', 0.05, 554 * p); }
+    else if (kind === 'oops') note(740 * p, 0, 0.32, 'triangle', 0.06, 370 * p);
+    else { note(900 * p, 0, 0.1, 'sine', 0.06, 1200 * p); note(1100 * p, 0.08, 0.14, 'sine', 0.05, 700 * p); }
+  },
+  // the podium: soft applause and cheering, with a little fanfare when the player is on it
+  cheer: (fanfare) => {
+    for (let i = 0; i < 70; i++) whoosh(Math.random() * 2.6, 0.04, 'bandpass', 1800 + Math.random() * 1200, 1400, 0.025 + Math.random() * 0.02, 1.5);
+    whoosh(0, 1.6, 'bandpass', 600, 1100, 0.05, 0.8);
+    if (fanfare) [523, 659, 784, 1047, 784, 1047].forEach((f, i) => note(f, 0.1 + i * 0.14 + (i > 3 ? 0.1 : 0), i === 5 ? 0.8 : 0.2, 'triangle', 0.08));
+  },
+  // off a jump: a rising "whee"
+  jump: () => { note(392, 0, 0.35, 'triangle', 0.07, 784); whoosh(0, 0.4, 'bandpass', 700, 2200, 0.08, 1.2); },
+  // and back on the ground: a soft bump with a springy rebound
+  land: () => { note(140, 0, 0.18, 'sine', 0.14, 70); whoosh(0, 0.2, 'lowpass', 1200, 220, 0.1, 0.9); note(330, 0.06, 0.16, 'triangle', 0.05, 520); },
+  // a soap bubble blown up round the kart: a soft rising shimmer
+  bubble: () => { [659, 880, 1109, 1319].forEach((f, i) => note(f, i * 0.06, 0.3, 'sine', 0.06, f * 1.06)); whoosh(0, 0.45, 'bandpass', 600, 2400, 0.06, 2); },
+  // and bursting: a light "plop"
+  pop: () => { note(1100, 0, 0.09, 'sine', 0.14, 380); whoosh(0, 0.12, 'highpass', 2500, 5000, 0.06, 0.8); note(1760, 0.03, 0.08, 'triangle', 0.04); },
+  // the magnet switches on with a wobbly "wooo-ooo"
+  magnet: () => { [392, 523, 392, 523, 659].forEach((f, i) => note(f, i * 0.07, 0.14, 'triangle', 0.06, f * 1.12)); },
+  // the cloud puffs off towards the leader
+  cloud: () => { whoosh(0, 0.6, 'lowpass', 400, 1600, 0.12, 0.7); note(523, 0, 0.2, 'sine', 0.06, 784); note(784, 0.12, 0.25, 'sine', 0.05, 1047); },
+  // raindrops pattering on the player
+  drizzle: () => { for (let i = 0; i < 10; i++) note(1400 + Math.random() * 900, i * 0.13 + Math.random() * 0.06, 0.07, 'sine', 0.05, 700); },
 };
 function gearOf(v) { let g = 1; while (g < GEARS.length - 1 && v >= GEARS[g]) g++; return g; }
 function revOf(v, g) { const lo = GEARS[g - 1], hi = GEARS[g]; return clamp(0.25 + 0.75 * ((v - lo) / (hi - lo)), 0.2, 1); }
@@ -145,7 +173,7 @@ const pitchOf = (r) => 75 + r * 150;
 // rev: optional override (0..1) used while waiting on the grid
 function setEngine(k, throttle, dt, rev = null) {
   if (!eng) return;
-  const t = AC.currentTime, v = Math.abs(k.speed), off = Math.abs(k.lat) > W + 1.2;
+  const t = AC.currentTime, v = Math.abs(k.speed), rumble = k.surf ? k.surf.rumble : 0, off = rumble > 0;
   // the gearbox hears a speed that climbs slowly, so the pull through the gears lasts several seconds
   const top = GEARS[GEARS.length - 3];
   // a sharp bend "lifts off" a little, dropping a gear on the way in and picking it up on the way out
@@ -184,7 +212,7 @@ function setEngine(k, throttle, dt, rev = null) {
   eng.gain.gain.setTargetAtTime(vol * PLAYER_ENGINE_VOL, t, 0.05);
   eng.skid.g.gain.setTargetAtTime(k.drifting ? 0.04 : 0, t, 0.05);
   eng.skid.f.frequency.setTargetAtTime(1300 + v * 12 + Math.sin(t * 9) * 150, t, 0.05);
-  eng.rumble.g.gain.setTargetAtTime(off ? clamp(v / 20, 0, 1) * 0.12 : 0, t, 0.08);
+  eng.rumble.g.gain.setTargetAtTime(clamp(v / 20, 0, 1) * 0.12 * rumble, t, 0.08);
   // turbo: an airy whoosh that sweeps up as it kicks in and lasts as long as the boost
   eng.jetT = k.boost > 0 ? eng.jetT + dt : 0;
   const jet = k.boost > 0 ? Math.min(1, k.boost / 0.3) : 0;

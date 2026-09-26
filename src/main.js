@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { $, clamp, rnd, wrapA, store, hex } from './util.js';
 import { stage, renderer, scene, camera, sky, sun } from './render.js';
-import { N, W, LIM, LAPS, P, T, S, SEG, headingAt, nearest, clouds } from './track.js';
-import { CHARS, makeKart, makePortraits } from './characters.js';
-import { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, animateFireball, makeIceCream } from './items.js';
-import { MAX_HOGS, hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
+import { N, W, LIM, LAPS, CUT_W, P, T, S, SEG, TRACKS, SURF, cutPts, headingAt, nearest, cutAt, rampLift, surfaceAt, loadTrack, currentTrack, updateScenery } from './track.js';
+import { CHARS, makeKart, makePortraits, speechTexture } from './characters.js';
+import { ICONS, ITEM_NAMES, boxes, BOX_ROWS, placeBoxes, makeHog, makeFireball, animateFireball, makeIceCream, makeBubble, makeMagnet, makeRainCloud } from './items.js';
+import { MAX_HOGS, hedgehogSpots, placeHedgehogs, pullHedgehogs, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
 import { parts, emit, updateParticles, burst } from './particles.js';
+import { showPodium, hidePodium, podiumOn, updatePodium, podiumCamera } from './podium.js';
+import { playSong, stopSong, setTempo, duckMusic, toggleMusic } from './music.js';
 import { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
 /* ================= Game state ================= */
@@ -13,6 +15,10 @@ import { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine,
 // Drift charge levels for the small and the big turbo, reachable within one ordinary bend
 const DRIFT_MINI = 0.5, DRIFT_BIG = 1.2;
 const ICE_FLIGHT = 0.9;
+// how long a bubble, a magnet and a rain shower last
+const BUBBLE_T = 10, MAGNET_T = 6, RAIN_T = 4;
+// how long a reaction (a speech bubble and a head gesture) lasts, and how often a driver may react
+const REACT_T = 1.6, REACT_GAP = 2.5, PASS_GAP = 6;
 const AI_MAX_HOGS = 3, AI_SHOT_GAP = 4.5, SAFE_AFTER_HIT = 2.2;
 const CC = [
   { base: 30, ai: 0.9, label: '50 cc', in: 'v 50 cc' },
@@ -21,15 +27,20 @@ const CC = [
   // kids' mode: automatic throttle, gentle steering; opponents keep close so there is still a race to win
   { base: 28, ai: 0.98, label: 'Dětský režim', in: 'v dětském režimu' },
 ];
-let ccIdx = 1, selected = 0, kid = store.get('dk-kid') === '1';
+let ccIdx = 1, selected = 0, trackIdx = 0, kid = store.get('dk-kid') === '1';
+// the cup: all circuits in a row, points for every place; `cup` is null outside a running cup
+const CUP_POINTS = [10, 8, 6, 4, 2, 1];
+let cupMode = store.get('dk-cup') === '1', cup = null;
 const cls = () => (kid ? 3 : ccIdx);
 let state = 'menu', paused = false, raceTime = 0, cdT = 0, cdShown = null, finishCount = 0, doneT = 0, gTime = 0;
 let player = null, launchAt = null, aiShotT = 0;
-const projectiles = [], hazards = [];
+const projectiles = [], hazards = [], rainClouds = [];
 
 const karts = CHARS.map((ch) => {
   const v = makeKart(ch);
   scene.add(v.root);
+  v.bubble = makeBubble(); v.bubble.visible = false; v.root.add(v.bubble);
+  v.magnet = makeMagnet(); v.magnet.visible = false; v.magnet.position.y = 3.9; v.root.add(v.magnet);
   return { ch, v, ai: { t: 0, phase: rnd(0, 6.28), freq: rnd(0.25, 0.45), itemT: 0, hogT: 0, skill: 1 } };
 });
 
@@ -41,8 +52,8 @@ function resetKart(k, slot) {
     idx: i, lap: -1, prog: -N, lat,
     x: P[i].x + S[i].x * lat, z: P[i].z + S[i].z * lat, y: 0, hopV: 0,
     h: headingAt(i), speed: 0, vx: 0, vz: 0, st: 0,
-    drifting: false, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
-    item: null, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, shake: 0, crashCd: 0, pushX: 0, pushZ: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
+    drifting: false, air: false, rampH: 0, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
+    item: null, bubble: 0, magnet: 0, rain: 0, react: null, reactT: 0, reactCd: 0, passCd: 0, dizzy: 0, aheadP: null, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, shake: 0, crashCd: 0, pushX: 0, pushZ: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
   });
   // a touch slower than the player at the top speed, each with its own comfortable gap
   k.ai.skill = CC[cls()].ai * rnd(0.93, 0.97);
@@ -51,6 +62,7 @@ function resetKart(k, slot) {
   k.ai.itemT = 0;
   k.ai.hogT = rnd(8, 12);
   k.kid = false;
+  k.v.say.visible = false;
   syncKart(k, 0);
 }
 function placeGrid() {
@@ -73,10 +85,32 @@ function syncKart(k, dt) {
   const sh = k.shake * k.shake;
   v.body.position.set(Math.sin(gTime * 57) * 0.14 * sh, Math.abs(Math.sin(gTime * 41)) * 0.1 * sh, 0);
   v.body.rotation.x = Math.sin(gTime * 47) * 0.09 * sh;
-  v.head.rotation.z = k.st * 0.18;
-  v.head.rotation.y = -k.st * 0.25;
+  v.head.rotation.set(0, -k.st * 0.25, k.st * 0.18);
+  // a reaction: the speech bubble pops up, and the head cheers, looks back or shakes
+  if (k.react) {
+    const t = (k.reactT += dt), e = Math.sin(clamp(t / REACT_T, 0, 1) * Math.PI);
+    if (k.react === 'cheer') v.head.rotation.x = Math.sin(t * 18) * 0.2 * e;
+    else if (k.react === 'bye') v.head.rotation.y += k.lookSide * 1.1 * e;
+    else if (k.react === 'oops') v.head.rotation.y += Math.sin(t * 22) * 0.35 * e;
+    else v.head.rotation.z += Math.sin(t * 16) * 0.3 * e;
+    const pop = Math.min(1, t * 7);
+    v.say.scale.set(2.6 * pop, 1.46 * pop, 1);
+    v.say.material.opacity = clamp((REACT_T - t) / 0.3, 0, 1);
+    if (t >= REACT_T) { k.react = null; v.say.visible = false; }
+  }
+  // dizzy after a hit: stars circle the head and it wobbles
+  v.stars.visible = k.dizzy > 0;
+  if (k.dizzy > 0) { k.dizzy -= dt; v.stars.rotation.y += dt * 6; v.head.rotation.z += Math.sin(gTime * 7) * 0.25; }
   // blinking while protected after a hit
   v.root.visible = !(k.safe > 0 && k.spin <= 0 && Math.floor(k.safe * 10) % 2);
+  // the bubble wobbles and blinks when it is about to burst; the magnet spins over the driver's head
+  v.bubble.visible = k.bubble > 0 && (k.bubble > 2 || Math.floor(k.bubble * 8) % 2 === 0);
+  if (v.bubble.visible) {
+    v.bubble.material.uniforms.t.value = gTime;
+    v.bubble.scale.set(1 + Math.sin(gTime * 7) * 0.03, 1 + Math.sin(gTime * 7 + 2) * 0.03, 1 + Math.sin(gTime * 6 + 4) * 0.03);
+  }
+  v.magnet.visible = k.magnet > 0;
+  if (v.magnet.visible) { v.magnet.rotation.y += dt * 4; v.magnet.position.y = 3.9 + Math.sin(gTime * 5) * 0.15; }
   for (const w of v.wheels) w.rotation.x += (k.speed * dt) / 0.48;
   for (const p of v.pivots) p.rotation.y = -k.st * 0.45;
 }
@@ -95,7 +129,8 @@ addEventListener('keydown', (e) => {
   if (['Space', 'ControlLeft', 'ControlRight'].includes(e.code)) firePressed = true;
   if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
   if (e.code === 'KeyM') toggleMute();
-  if (e.code === 'Enter' && state === 'menu') startRace();
+  if (e.code === 'KeyH') toggleMusic();
+  if (e.code === 'Enter' && state === 'menu') start();
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
@@ -145,7 +180,10 @@ function playerInput() {
 // Kids' mode helper: a gentle pull towards the road ahead, strong when the child does not steer at all
 function kidAssist(k, steer) {
   const ti = (k.idx + 14) % N, lane = clamp(k.lat, -W * 0.55, W * 0.55);
-  const tx = P[ti].x + S[ti].x * lane, tz = P[ti].z + S[ti].z * lane;
+  let tx = P[ti].x + S[ti].x * lane, tz = P[ti].z + S[ti].z * lane;
+  // in the shortcut the pull is along the dirt track instead
+  const c = k.surf === SURF.dirt ? cutAt(k.x, k.z) : null;
+  if (c) { const q = cutPts[Math.min(c.n + 4, cutPts.length - 1)]; tx = q.x; tz = q.z; }
   const diff = wrapA(Math.atan2(tx - k.x, tz - k.z) - k.h);
   return clamp(-diff * 1.6, -1, 1) * (steer ? 0.25 : 0.7);
 }
@@ -158,9 +196,10 @@ function stepKart(k, inp, dt) {
   // kids get a slow, smooth wheel so a tap on a key never jerks the kart
   k.st += (inp.steer - k.st) * Math.min(1, dt * (k.kid ? 1.8 : 10));
   k.thr = inp.throttle;
-  const off = Math.abs(k.lat) > W + 1.2;
-  let maxS = base * k.mul;
-  if (off) maxS *= 0.48;
+  const surf = surfaceAt(k.idx, k.lat, k.x, k.z), off = surf.rumble > 0;
+  k.surf = surf;
+  let maxS = base * k.mul * surf.speed;
+  if (k.rain > 0) { k.rain -= dt; maxS *= 0.7; }
   if (k.boost > 0) { k.boost -= dt; maxS = Math.max(maxS, base * 1.38); k.speed += 55 * dt; }
   else if (inp.throttle && k.speed < maxS) k.speed += 25 * dt * (1 - 0.55 * Math.max(0, k.speed) / maxS);
   if (inp.brake) { k.speed -= (k.speed > 0 ? 45 : 14) * dt; if (k.speed < -11) k.speed = -11; }
@@ -187,7 +226,9 @@ function stepKart(k, inp, dt) {
   k.h -= yaw * sf * dt;
 
   const fx = Math.sin(k.h), fz = Math.cos(k.h);
-  const grip = k.spin > 0 ? 1.2 : k.drifting ? 2.6 : off ? 5 : 10;
+  // kids slide on ice only a little
+  const sg = k.kid ? Math.max(0.6, surf.grip) : surf.grip;
+  const grip = k.spin > 0 ? 1.2 : k.drifting ? 2.6 * Math.min(1, sg / 0.5) : 10 * sg;
   const g = 1 - Math.exp(-grip * dt);
   k.vx += (fx * k.speed - k.vx) * g;
   k.vz += (fz * k.speed - k.vz) * g;
@@ -199,11 +240,28 @@ function stepKart(k, inp, dt) {
     k.pushX *= f; k.pushZ *= f;
     if (Math.abs(k.pushX) + Math.abs(k.pushZ) < 0.05) k.pushX = k.pushZ = 0;
   }
-  if (k.hopV || k.y > 0) { k.y += k.hopV * dt; k.hopV -= 24 * dt; if (k.y <= 0) { k.y = 0; k.hopV = 0; } }
+  // jumps: the kart rides up the wedge, and leaving its top edge at speed throws it into the air
+  const lift = rampLift(k.x, k.z);
+  if (lift > 0 && k.y <= lift + 0.25 && k.speed > 0) { k.y = lift; k.hopV = 0; k.rampH = lift; }
+  else {
+    if (k.rampH > 1.1 && k.speed > 12) takeOff(k);
+    k.rampH = 0;
+    if (k.hopV || k.y > 0) {
+      k.y += k.hopV * dt; k.hopV -= 24 * dt;
+      if (k.y <= 0) { k.y = 0; k.hopV = 0; if (k.air) land(k); }
+    }
+  }
 
   const i = nearest(k.x, k.z, k.idx), p = P[i], sd = S[i];
   let lat = (k.x - p.x) * sd.x + (k.z - p.z) * sd.z;
-  if (Math.abs(lat) > LIM) {
+  const c0 = Math.abs(lat) > LIM ? cutAt(k.x, k.z) : null, cut = c0 && c0.d < CUT_W + 6 ? c0 : null;
+  if (cut && cut.d > CUT_W) {
+    // inside the shortcut, but up against the hay bales along it
+    const over = cut.d - CUT_W, impact = Math.max(0, k.vx * cut.nx + k.vz * cut.nz);
+    k.x -= cut.nx * over; k.z -= cut.nz * over;
+    if (impact > 6 && k.crashCd <= 0) crash(k, clamp(impact / 25, 0.3, 1), k.x + cut.nx * 1.2, k.z + cut.nz * 1.2);
+    k.vx -= cut.nx * impact; k.vz -= cut.nz * impact; k.speed *= 0.85;
+  } else if (Math.abs(lat) > LIM && !cut) {
     const c = Math.sign(lat) * LIM;
     k.x += sd.x * (c - lat); k.z += sd.z * (c - lat); lat = c;
     const impact = Math.abs(k.vx * sd.x + k.vz * sd.z);
@@ -223,7 +281,21 @@ function stepKart(k, inp, dt) {
     for (const sgn of [-1, 1]) emit(rx + fz * sgn * 1.05, 0.3, rz - fx * sgn * 1.05, rnd(-2, 2), rnd(1, 4), rnd(-2, 2), c[0], c[1], c[2], 0.35, 12);
   }
   if (k.boost > 0) emit(k.x - fx * 1.9, 0.75 + k.y, k.z - fz * 1.9, -fx * 8 + rnd(-1, 1), rnd(0, 2), -fz * 8 + rnd(-1, 1), 1, rnd(0.35, 0.6), 0.1, 0.25);
-  if (off && Math.abs(k.speed) > 8 && Math.random() < 0.6) emit(rx, 0.4, rz, rnd(-1.5, 1.5), rnd(1, 3), rnd(-1.5, 1.5), 0.32, 0.27, 0.16, 0.6, 2);
+  const dust = surf.dust;
+  if (dust && Math.abs(k.speed) > 8 && Math.random() < 0.6) emit(rx, 0.4, rz, rnd(-1.5, 1.5), rnd(1, 3), rnd(-1.5, 1.5), dust[0], dust[1], dust[2], 0.6, 2);
+}
+
+function takeOff(k) {
+  k.hopV = clamp(k.speed * 0.3, 5, 13); k.air = true; k.drifting = false;
+  if (k.isPlayer) { showMsg('Hop!', 0.8); sfx.jump(); }
+}
+// touching down after a jump: a puff of dust, a little bounce and a short turbo as a reward
+function land(k) {
+  k.air = false; k.hopV = 2.2; k.shake = Math.max(k.shake, 0.4);
+  k.boost = Math.max(k.boost, 0.45);
+  const d = k.surf && k.surf.dust ? k.surf.dust : [0.8, 0.78, 0.72];
+  for (let n = 0; n < 16; n++) emit(k.x + rnd(-1.5, 1.5), 0.3, k.z + rnd(-1.5, 1.5), rnd(-5, 5), rnd(1, 3), rnd(-5, 5), d[0], d[1], d[2], 0.6, 4);
+  if (k.isPlayer) sfx.land();
 }
 
 // Rubber band: a player who drives well pulls ahead but only by a short lead, and after a stop the field
@@ -251,7 +323,7 @@ function paceMul(k) {
 // Kids' mode: a kart that wanders far off the road, or turns round the wrong way, is put back
 // in the middle of the road after a moment, with a puff of cloud
 function rescueKid(k, dt) {
-  const lost = Math.abs(k.lat) > W + 6 || k.wrongT > 1.5;
+  const lost = (Math.abs(k.lat) > W + 6 && k.surf !== SURF.dirt) || k.wrongT > 1.5;
   k.lostT = lost && k.spin <= 0 ? (k.lostT || 0) + dt : 0;
   if (k.lostT < 1.2) return;
   burst(k.x, 1.2, k.z, 24, 1, 1, 1);
@@ -294,15 +366,36 @@ function crash(k, s, x, z) {
 }
 
 // kind: 'hog', 'fire' or 'ice'
+// kind: 'cheer', 'bye', 'oops' or 'ouch'; heard only near the player
+function react(k, kind) {
+  if (k.reactCd > 0 || k.finished) return;
+  k.react = kind; k.reactT = 0; k.reactCd = REACT_GAP;
+  // which way to look back: towards the player
+  k.lookSide = Math.sign((player.x - k.x) * Math.cos(k.h) - (player.z - k.z) * Math.sin(k.h)) || 1;
+  k.v.say.material.map = speechTexture(kind);
+  k.v.say.visible = true;
+  if (Math.hypot(k.x - player.x, k.z - player.z) < 35) sfx.voice(kind, k.ch.voice);
+}
 function hitKart(k, by, kind) {
   if (k.spin > 0 || k.safe > 0) return;
+  if (k.bubble > 0) { popBubble(k); if (k.isPlayer) showMsg('Bublina tě ochránila!', 1.1); return; }
   k.spin = 1.1; k.spinDir = Math.random() < 0.5 ? -1 : 1; k.drifting = false; k.boost = 0; k.shake = 1;
   if (k.isPlayer) k.safe = k.spin + SAFE_AFTER_HIT;
   burst(k.x, 1.2, k.z, 26, 1, 0.85, 0.2);
+  k.dizzy = k.spin + 1.2;
+  if (!k.isPlayer) react(k, 'ouch');
+  if (by && by !== k) react(by, 'cheer');
   if (k.isPlayer) { showMsg('Au!'); sfx.hit(); sfx.hitBy(kind); }
   else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); }
 }
 
+function popBubble(k) {
+  k.bubble = 0; k.safe = Math.max(k.safe, 0.6);
+  burst(k.x, 1.4, k.z, 30, 0.7, 0.9, 1);
+  if (k.isPlayer || (player && Math.hypot(k.x - player.x, k.z - player.z) < 30)) sfx.pop();
+}
+// the rain cloud goes for whoever leads the race, or for the next one if that is the thrower
+function leaderFor(k) { return ranked().find((o) => o !== k && !o.finished) || null; }
 function targetAhead(k) {
   let best = null, bd = Infinity;
   for (const o of karts) { if (o === k || o.finished) continue; const d = o.prog - k.prog; if (d > 0 && d < bd) { bd = d; best = o; } }
@@ -323,6 +416,15 @@ function useItem(k) {
   if (!it) return;
   k.item = null;
   if (it === 'turbo') { k.boost = Math.max(k.boost, 1.6); if (k.isPlayer) sfx.boost(); }
+  if (it === 'bubble') { k.bubble = BUBBLE_T; if (k.isPlayer) sfx.bubble(); }
+  if (it === 'magnet') { k.magnet = MAGNET_T; if (k.isPlayer) sfx.magnet(); }
+  if (it === 'cloud') {
+    const tg = leaderFor(k);
+    if (tg) {
+      rainClouds.push({ m: makeRainCloud(), tg, owner: k, x: k.x, y: k.y + 3, z: k.z, rain: 0, age: 0 });
+      if (k.isPlayer) sfx.cloud();
+    }
+  }
   if (it === 'fire') {
     // three fireballs fanning out along the road. The road is far wider than three fireballs, so the
     // player's ones each pick one of the nearest karts ahead and home in on it, left ball to the
@@ -355,9 +457,13 @@ function throwHog(k) {
 function rollItem(k) {
   const rank = karts.filter((o) => o.prog > k.prog).length + 1;
   // turbo is common, and more so the further back the kart is; the rest splits evenly
-  const pT = 0.34 + 0.07 * (rank - 1);
-  const r = Math.random();
-  return r < pT ? 'turbo' : r < pT + (1 - pT) / 2 ? 'fire' : 'icecream';
+  const pT = 0.26 + 0.06 * (rank - 1);
+  if (Math.random() < pT) return 'turbo';
+  // a bubble helps most at the front; the rain cloud is for those who chase the leader
+  const w = { fire: 1, icecream: 1, magnet: 0.8, bubble: rank <= 3 ? 1.1 : 0.6, cloud: rank === 1 ? 0 : rank >= 3 ? 1 : 0.4 };
+  let r = Math.random() * Object.values(w).reduce((a, b) => a + b, 0);
+  for (const [it, p] of Object.entries(w)) { r -= p; if (r <= 0) return it; }
+  return 'fire';
 }
 
 function aiInput(k, dt) {
@@ -384,6 +490,7 @@ function aiInput(k, dt) {
         else if (a.itemT < -8 && !(tg && tg.isPlayer)) useItem(k);
       }
       else if (k.item === 'turbo') { if (bend < 0.3) useItem(k); }
+      else if (k.item === 'cloud') { const tg = leaderFor(k); if (fair(tg)) { useItem(k); shotAt(tg); } }
       else useItem(k);
     }
   }
@@ -467,6 +574,21 @@ function setupMini() {
   const path = () => { g.beginPath(); P.forEach((p, i) => { const [x, y] = mapPt(p.x, p.z); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); };
   path(); g.strokeStyle = '#14213d'; g.lineWidth = 9 * dpr; g.stroke();
   path(); g.strokeStyle = '#ffffff'; g.lineWidth = 5 * dpr; g.stroke();
+  // ice and sand patches
+  for (const zn of currentTrack().zones) {
+    g.beginPath();
+    for (let i = zn.a, first = true; ; i = (i + 1) % N, first = false) { const [x, y] = mapPt(P[i].x, P[i].z); first ? g.moveTo(x, y) : g.lineTo(x, y); if (i === zn.b) break; }
+    g.strokeStyle = zn.s === 'ice' ? '#7cc8f2' : '#e0a95c'; g.lineWidth = 5 * dpr; g.stroke();
+  }
+  // the shortcut as a dashed dirt path, the jumps as yellow bars
+  if (cutPts.length) {
+    g.beginPath(); cutPts.forEach((p, i) => { const [x, y] = mapPt(p.x, p.z); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.setLineDash([5 * dpr, 4 * dpr]); g.strokeStyle = '#a0764a'; g.lineWidth = 4 * dpr; g.stroke(); g.setLineDash([]);
+  }
+  for (const r of currentTrack().ramps) {
+    const i = r.i, [x0, y0] = mapPt(P[i].x - S[i].x * 9, P[i].z - S[i].z * 9), [x1, y1] = mapPt(P[i].x + S[i].x * 9, P[i].z + S[i].z * 9);
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.strokeStyle = '#ffc93c'; g.lineWidth = 3 * dpr; g.stroke();
+  }
   const [sx, sy] = mapPt(P[0].x, P[0].z);
   g.fillStyle = '#ef476f'; g.fillRect(sx - 3 * dpr, sy - 6 * dpr, 6 * dpr, 12 * dpr);
 }
@@ -506,6 +628,41 @@ function selectChar(i) {
   charsEl.querySelectorAll('.char').forEach((b, j) => b.setAttribute('aria-checked', String(j === i)));
   placeGrid();
 }
+const tracksEl = $('#tracks');
+TRACKS.forEach((tr, i) => {
+  const b = document.createElement('button');
+  b.className = 'track'; b.setAttribute('role', 'radio');
+  b.innerHTML = `<canvas width="150" height="100"></canvas><b>${tr.name}</b>`;
+  drawTrackPreview(b.querySelector('canvas'), tr);
+  b.addEventListener('click', () => selectTrack(i));
+  tracksEl.appendChild(b);
+});
+// the outline of a circuit in its own colours, seen the same way round as on the minimap
+function drawTrackPreview(cv, tr) {
+  const g = cv.getContext('2d'), w = cv.width, h = cv.height;
+  const pts = new THREE.CatmullRomCurve3(tr.ctrl.map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'centripetal').getSpacedPoints(160);
+  const xs = pts.map((p) => p.x), zs = pts.map((p) => p.z);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
+  const s = Math.min((w - 24) / (maxX - minX), (h - 24) / (maxZ - minZ));
+  const ox = (w - (maxX - minX) * s) / 2, oy = (h - (maxZ - minZ) * s) / 2;
+  const grd = g.createLinearGradient(0, 0, 0, h);
+  grd.addColorStop(0, tr.theme.swatch[1]); grd.addColorStop(1, tr.theme.swatch[0]);
+  g.fillStyle = grd; g.fillRect(0, 0, w, h);
+  g.lineJoin = 'round';
+  const path = () => { g.beginPath(); pts.forEach((p, i) => { const x = (maxX - p.x) * s + ox, y = (maxZ - p.z) * s + oy; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); };
+  path(); g.strokeStyle = '#14213d'; g.lineWidth = 9; g.stroke();
+  path(); g.strokeStyle = '#ffffff'; g.lineWidth = 5; g.stroke();
+}
+// remember: false while the cup goes from one circuit to the next
+function selectTrack(i, remember = true) {
+  trackIdx = i;
+  if (remember) store.set('dk-track', String(i));
+  loadTrack(i);
+  placeBoxes();
+  placeHedgehogs([...BOX_ROWS.map((f) => Math.floor(N * f)), ...currentTrack().ramps.map((r) => r.i)]);
+  tracksEl.querySelectorAll('.track').forEach((b, j) => b.setAttribute('aria-checked', String(j === i)));
+  placeGrid(); setupMini(); showBest();
+}
 document.querySelectorAll('#cc button').forEach((b) => b.addEventListener('click', () => {
   ccIdx = Number(b.dataset.cc);
   store.set('dk-cc', String(ccIdx));
@@ -513,6 +670,13 @@ document.querySelectorAll('#cc button').forEach((b) => b.addEventListener('click
   showBest();
 }));
 document.querySelectorAll('#mode button').forEach((b) => b.addEventListener('click', () => setKid(b.dataset.kid === '1')));
+document.querySelectorAll('#event button').forEach((b) => b.addEventListener('click', () => setCupMode(b.dataset.cup === '1')));
+function setCupMode(on) {
+  cupMode = on;
+  store.set('dk-cup', on ? '1' : '0');
+  document.querySelectorAll('#event button').forEach((x) => x.setAttribute('aria-checked', String((x.dataset.cup === '1') === on)));
+  show('#tracks', !on); show('#cupHint', on);
+}
 function setKid(on) {
   kid = on;
   store.set('dk-kid', kid ? '1' : '0');
@@ -521,20 +685,29 @@ function setKid(on) {
   show('#ccBlock', !kid);
   placeGrid(); showBest();
 }
+// the first circuit keeps the key it had before there were more of them
+const bestKey = () => 'dk-best-' + (trackIdx ? currentTrack().id + '-' : '') + cls();
 function showBest() {
-  const c = CC[cls()], b = store.get('dk-best-' + cls());
-  const t = b ? `Tvůj nejlepší čas ${c.in}: ${fmt(Number(b))}` : `${c.in} zatím nemáš zajetý čas.`;
+  const c = CC[cls()], b = store.get(bestKey()), tr = currentTrack();
+  const t = b ? `Tvůj nejlepší čas ${tr.in} ${c.in}: ${fmt(Number(b))}` : `${tr.in} ${c.in} zatím nemáš zajetý čas.`;
   $('#best').textContent = t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 function show(id, on) { $(id).hidden = !on; }
-function startRace() {
-  initAudio();
-  setGearBase(CC[cls()].base);
-  placeGrid();
+function clearField() {
   for (const p of projectiles) scene.remove(p.mesh);
   for (const h of hazards) scene.remove(h.m);
-  projectiles.length = hazards.length = 0;
+  for (const c of rainClouds) scene.remove(c.m);
+  projectiles.length = hazards.length = rainClouds.length = 0;
+}
+function startRace() {
+  initAudio();
+  // quiet during the countdown, so the beeps are clear
+  stopSong(0.15);
+  hidePodium();
+  setGearBase(CC[cls()].base);
+  placeGrid();
+  clearField();
   for (const b of boxes) { b.respawn = 0; b.m.visible = true; }
   resetHedgehogs();
   for (const q of parts) q.life = 0;
@@ -546,8 +719,22 @@ function startRace() {
   show('#menu', false); show('#results', false); show('#pause', false); show('#hud', true); show('#touch', isTouch);
   requestAnimationFrame(setupMini);
 }
+function start() {
+  if (!cupMode) { startRace(); return; }
+  cup = { round: 0, pts: new Map(karts.map((k) => [k, 0])), last: new Map() };
+  selectTrack(0, false);
+  startRace();
+}
+function nextRound() {
+  cup.round++;
+  selectTrack(cup.round, false);
+  startRace();
+}
 function toMenu() {
+  if (cup) { cup = null; selectTrack(clamp(Number(store.get('dk-track')) || 0, 0, TRACKS.length - 1)); }
   state = 'menu'; paused = false;
+  hidePodium(); clearField();
+  playSong('menu');
   show('#hud', false); show('#results', false); show('#pause', false); show('#touch', false); show('#menu', true);
   placeGrid(); showBest(); silenceEngine();
 }
@@ -555,16 +742,24 @@ function togglePause() {
   if (state !== 'race' && state !== 'countdown') return;
   paused = !paused;
   show('#pause', paused);
+  duckMusic(paused);
   if (paused) { silenceEngine(); $('#resumeBtn').focus(); }
 }
-$('#startBtn').addEventListener('click', startRace);
+$('#startBtn').addEventListener('click', start);
 $('#resumeBtn').addEventListener('click', togglePause);
 $('#restartBtn').addEventListener('click', startRace);
 $('#quitBtn').addEventListener('click', toMenu);
-$('#againBtn').addEventListener('click', startRace);
+$('#againBtn').addEventListener('click', () => {
+  if (!cup) startRace();
+  else if (cup.round < TRACKS.length - 1) nextRound();
+  else start();
+});
 $('#menuBtn').addEventListener('click', toMenu);
 $('#pauseBtn').addEventListener('click', togglePause);
 $('#muteBtn').addEventListener('click', toggleMute);
+$('#musicBtn').addEventListener('click', () => { initAudio(); toggleMusic(); if (state === 'menu') playSong('menu'); });
+// browsers only allow sound after the first click or key press, so the menu tune starts then
+for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { if (state === 'menu') { initAudio(); playSong('menu'); } }, { once: true });
 document.addEventListener('visibilitychange', () => { if (document.hidden && !paused && (state === 'race' || state === 'countdown')) togglePause(); });
 
 function showResults() {
@@ -573,15 +768,46 @@ function showResults() {
   show('#hud', false); show('#touch', false);
   const rows = karts.map((k) => ({ k, t: k.finished ? k.finishTime : raceTime + ((LAPS * N - k.prog) * SEG) / (CC[cls()].base * 0.85), est: !k.finished }));
   rows.sort((a, b) => a.t - b.t);
-  $('#resBody').innerHTML = rows.map((r, i) =>
-    `<tr class="${r.k.isPlayer ? 'me' : ''}"><td>${i + 1}.</td><td><span class="dot" style="background:${hex(r.k.ch.kart)}"></span>${r.k.ch.name}</td><td class="${r.est ? 'est' : ''}">${r.est ? '≈ ' : ''}${fmt(r.t)}</td></tr>`).join('');
+  const name = (k) => `<span class="dot" style="background:${hex(k.ch.kart)}"></span>${k.ch.name}`;
   const place = rows.findIndex((r) => r.k.isPlayer) + 1;
-  $('#resTitle').textContent = `${place}. místo`;
   const c = CC[cls()];
-  $('#resEyebrow').textContent = place === 1 ? 'Vítězství · Slunečný okruh' : `Cíl · ${c.label}`;
-  const key = 'dk-best-' + cls(), prev = Number(store.get(key));
-  if (!prev || player.finishTime < prev) { store.set(key, String(player.finishTime)); $('#resBest').textContent = `Nový osobní rekord ${c.in}!`; }
-  else $('#resBest').textContent = `Osobní rekord ${c.in}: ${fmt(prev)}`;
+  const tr = currentTrack();
+  $('#resTitle').textContent = `${place}. místo`;
+  $('#resEyebrow').textContent = place === 1 ? `Vítězství · ${tr.name}` : `Cíl · ${tr.name} · ${c.label}`;
+  $('#againBtn').textContent = 'Jet znovu';
+  $('#menuBtn').textContent = 'Změnit jezdce';
+  if (cup) {
+    rows.forEach((r, i) => { cup.pts.set(r.k, cup.pts.get(r.k) + CUP_POINTS[i]); cup.last.set(r.k, i); });
+    // standings: most points first, a tie goes to whoever did better in this race
+    const table = karts.slice().sort((a, b) => cup.pts.get(b) - cup.pts.get(a) || cup.last.get(a) - cup.last.get(b));
+    const final = cup.round === TRACKS.length - 1, cupPlace = table.indexOf(player) + 1;
+    $('#resHead').innerHTML = '<tr><th></th><th>Jezdec</th><th>Závod</th><th>Body</th></tr>';
+    $('#resBody').innerHTML = table.map((k, i) =>
+      `<tr class="${k.isPlayer ? 'me' : ''}"><td>${i + 1}.</td><td>${name(k)}</td><td class="plus">+${CUP_POINTS[cup.last.get(k)]}</td><td>${cup.pts.get(k)}</td></tr>`).join('');
+    $('#resEyebrow').textContent = `Pohár · závod ${cup.round + 1} ze ${TRACKS.length} · ${tr.name}`;
+    if (final) {
+      $('#resTitle').textContent = ['Zlatý pohár!', 'Stříbrný pohár!', 'Bronzový pohár!'][cupPlace - 1] || `${cupPlace}. místo v poháru`;
+      $('#resEyebrow').textContent = `Konec poháru · v posledním závodě ${place}. místo`;
+    }
+    $('#againBtn').textContent = final ? 'Nový pohár' : 'Další závod';
+    $('#menuBtn').textContent = 'Do menu';
+  } else {
+    $('#resHead').innerHTML = '';
+    $('#resBody').innerHTML = rows.map((r, i) =>
+      `<tr class="${r.k.isPlayer ? 'me' : ''}"><td>${i + 1}.</td><td>${name(r.k)}</td><td class="${r.est ? 'est' : ''}">${r.est ? '≈ ' : ''}${fmt(r.t)}</td></tr>`).join('');
+  }
+  const key = bestKey(), prev = Number(store.get(key));
+  if (!prev || player.finishTime < prev) { store.set(key, String(player.finishTime)); $('#resBest').textContent = `Nový osobní rekord ${tr.in} ${c.in}!`; }
+  else $('#resBest').textContent = `Osobní rekord ${tr.in} ${c.in}: ${fmt(prev)}`;
+  // the first three (of the race, or of the whole cup at its end) go up on the podium
+  const order = cup && cup.round === TRACKS.length - 1
+    ? karts.slice().sort((a, b) => cup.pts.get(b) - cup.pts.get(a) || cup.last.get(a) - cup.last.get(b))
+    : rows.map((r) => r.k);
+  clearField();
+  showPodium(order, !!cup && cup.round === TRACKS.length - 1);
+  podiumCamera(camera.position, camLook, camera.aspect);
+  sfx.cheer(order.indexOf(player) < 3);
+  playSong('podium');
   show('#results', true);
   $('#againBtn').focus();
 }
@@ -608,6 +834,7 @@ function simulate(dt) {
     if (cdT > 0 && n <= 3 && n !== cdShown) { cdShown = n; el.cd.textContent = n; el.cd.hidden = false; el.cd.classList.remove('pop'); void el.cd.offsetWidth; el.cd.classList.add('pop'); sfx.beep(); }
     if (cdT <= 0) {
       state = 'race'; sfx.go();
+      playSong(currentTrack().id); setTempo(1);
       el.cd.textContent = 'Jeď!'; el.cd.classList.remove('pop'); void el.cd.offsetWidth; el.cd.classList.add('pop');
       setTimeout(() => { el.cd.hidden = true; }, 800);
       if (launchAt !== null && launchAt < 0.75) { player.boost = 1.2; showMsg('Raketový start!'); sfx.boost(); }
@@ -631,15 +858,22 @@ function simulate(dt) {
       }
     } else inp = aiInput(k, dt);
     if (k.hogCd > 0) k.hogCd -= dt;
+    if (k.reactCd > 0) k.reactCd -= dt;
+    if (k.passCd > 0) k.passCd -= dt;
+    if (k.bubble > 0) k.bubble -= dt;
+    if (k.magnet > 0) { k.magnet -= dt; pullHedgehogs(k, dt); }
     if (k.safe > 0) k.safe -= dt;
     if (k.crashCd > 0) k.crashCd -= dt;
     if (k.shake > 0) k.shake = Math.max(0, k.shake - dt * 2.5);
     const lapBefore = k.lap;
     stepKart(k, inp, dt);
-    if (k.isPlayer && k.lap > lapBefore && k.lap < LAPS && k.lap > 0) showMsg(k.lap === LAPS - 1 ? 'Poslední kolo!' : `Kolo ${k.lap + 1}`);
+    if (k.isPlayer && k.lap > lapBefore && k.lap < LAPS && k.lap > 0) {
+      showMsg(k.lap === LAPS - 1 ? 'Poslední kolo!' : `Kolo ${k.lap + 1}`);
+      if (k.lap === LAPS - 1) setTempo(1.08);
+    }
     if (!k.finished && k.lap >= LAPS) {
       k.finished = true; k.finishTime = raceTime; k.place = ++finishCount;
-      if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); silenceEngine(0.4); }
+      if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); silenceEngine(0.4); stopSong(0.5); }
     }
     if (k.kid && !k.finished) rescueKid(k, dt);
     if (k.isPlayer && !k.finished) {
@@ -649,6 +883,16 @@ function simulate(dt) {
     }
   }
   firePressed = false;
+
+  // an opponent that overtakes the player waves "bye", one the player overtakes says "oops"
+  if (!player.finished) {
+    for (const k of karts) {
+      if (k === player || k.finished) continue;
+      const ahead = k.prog > player.prog;
+      if (k.aheadP !== null && ahead !== k.aheadP && k.passCd <= 0 && Math.abs(k.prog - player.prog) < 20) { react(k, ahead ? 'bye' : 'oops'); k.passCd = PASS_GAP; }
+      k.aheadP = ahead;
+    }
+  }
 
   // kart-to-kart bumps
   for (let a = 0; a < karts.length; a++) for (let b = a + 1; b < karts.length; b++) {
@@ -769,6 +1013,40 @@ function simulate(dt) {
     if (hit || h.life <= 0) { scene.remove(h.m); hazards.splice(n, 1); }
   }
 
+  // rain clouds: fly high over the field to their target, then drizzle on it for a while
+  for (let n = rainClouds.length - 1; n >= 0; n--) {
+    const c = rainClouds[n], tg = c.tg, m = c.m;
+    c.age += dt;
+    if (!c.rain) {
+      const dx = tg.x - c.x, dz = tg.z - c.z, d = Math.hypot(dx, dz);
+      const step = Math.min(d, dt * Math.max(70, tg.speed + 35));
+      c.x += (dx / (d || 1)) * step; c.z += (dz / (d || 1)) * step;
+      c.y += ((d > 30 ? 14 : tg.y + 4.2) - c.y) * Math.min(1, dt * 3);
+      m.rotation.y = Math.atan2(dx, dz);
+      if (d < 1.5 && Math.abs(c.y - tg.y - 4.2) < 1.2) {
+        if (tg.finished) c.rain = -1;
+        else if (tg.bubble > 0) { popBubble(tg); c.rain = -1; if (tg.isPlayer) showMsg('Bublina tě ochránila!', 1.1); }
+        else {
+          c.rain = RAIN_T; tg.rain = RAIN_T;
+          if (tg.isPlayer) { showMsg('Prší!', 1.1); sfx.drizzle(); } else if (c.owner.isPlayer) { showMsg('Ať zmokne!', 1); sfx.score(); }
+          if (!tg.isPlayer) react(tg, 'oops');
+          react(c.owner, 'cheer');
+        }
+      }
+    } else if (c.rain > 0) {
+      c.rain -= dt;
+      // a little ahead of the driver, so from behind the kart it is in view but clear of the HUD
+      c.x = tg.x + Math.sin(tg.h) * 1.5; c.z = tg.z + Math.cos(tg.h) * 1.5; c.y = tg.y + 4.2 + Math.sin(c.age * 3) * 0.2;
+      // turned towards the camera, which sits behind the kart
+      m.rotation.y = tg.h + Math.PI;
+      for (let e = 0; e < 5; e++) emit(c.x + rnd(-1.3, 1.3), c.y - 0.6, c.z + rnd(-1.3, 1.3), tg.vx, -14, tg.vz, 0.15, 0.4, 1, 0.3);
+    } else c.rain -= dt;
+    m.position.set(c.x, c.y, c.z);
+    // a cloud that is done floats up and shrinks away
+    if (c.rain < 0) { c.y += dt * 6; m.scale.setScalar(Math.max(0.01, 0.75 * (1 + c.rain))); }
+    if (c.rain <= -1 || c.age > 30) { scene.remove(m); rainClouds.splice(n, 1); }
+  }
+
   if (state === 'done') { doneT -= dt; if (doneT <= 0) showResults(); }
   // after the finish line only the fanfare plays, the engines fade out
   if (state === 'race') {
@@ -778,6 +1056,14 @@ function simulate(dt) {
 }
 
 function updateCamera(dt) {
+  if (podiumOn()) {
+    podiumCamera(camTarget, camLook, camera.aspect);
+    camera.position.lerp(camTarget, 1 - Math.exp(-3 * dt));
+    camera.lookAt(camLook);
+    camera.fov += (50 - camera.fov) * Math.min(1, dt * 3);
+    camera.updateProjectionMatrix();
+    return;
+  }
   if (state === 'menu') {
     const k = player, a = gTime * 0.35;
     camTarget.set(k.x + Math.sin(a) * 7.5, 3.2, k.z + Math.cos(a) * 7.5);
@@ -805,12 +1091,13 @@ function updateCamera(dt) {
 function frameUpdate(dt) {
   gTime += dt;
   for (const b of boxes) { b.m.rotation.y += dt * 1.2; b.m.rotation.x += dt * 0.6; b.m.position.y = 1.3 + Math.sin(gTime * 2 + b.m.position.x) * 0.2; }
-  for (const c of clouds) { c.position.x += dt * 3; if (c.position.x > 900) c.position.x = -700; }
+  updateScenery(dt, camera.position);
   if (!paused) {
     const steps = dt > 1 / 50 ? 2 : 1;
     for (let s = 0; s < steps; s++) simulate(dt / steps);
     updateHedgehogs(dt, camera.position);
-    for (const k of karts) syncKart(k, state === 'menu' || state === 'countdown' ? 0 : dt);
+    if (podiumOn()) updatePodium(dt, gTime);
+    else for (const k of karts) syncKart(k, state === 'menu' || state === 'countdown' ? 0 : dt);
     if (state === 'menu') player.v.head.rotation.y = Math.sin(gTime * 1.3) * 0.4;
     updateParticles(dt);
   }
@@ -833,6 +1120,8 @@ function loop(now) {
 // boot
 ccIdx = clamp(Number(store.get('dk-cc') ?? 1) || 0, 0, 2);
 document.querySelectorAll('#cc button').forEach((x) => x.setAttribute('aria-checked', String(Number(x.dataset.cc) === ccIdx)));
+selectTrack(clamp(Number(store.get('dk-track')) || 0, 0, TRACKS.length - 1));
+setCupMode(cupMode);
 selectChar(clamp(Number(store.get('dk-char')) || 0, 0, CHARS.length - 1));
 setKid(kid);
 addEventListener('resize', resize);

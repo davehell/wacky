@@ -10,8 +10,11 @@ const ICONS = {
   icecream: '<svg viewBox="0 0 64 64"><path d="M20 30h24L32 60z" fill="#e0a458" stroke="#b97c35" stroke-width="2" stroke-linejoin="round"/><circle cx="32" cy="24" r="14" fill="#f7a8b8"/><circle cx="24" cy="30" r="7" fill="#f7a8b8"/><circle cx="40" cy="30" r="7" fill="#f7a8b8"/><circle cx="34" cy="9" r="4" fill="#ef476f"/></svg>',
   fire: '<svg viewBox="0 0 64 64"><path d="M22 54C10 52 8 38 16 30L58 4 42 24 62 18 44 36 60 36 34 54z" fill="#ff7b25" stroke="#b33a0e" stroke-width="2.5" stroke-linejoin="round"/><path d="M24 46 48 16 38 30 52 28 36 42z" fill="#ffd166"/><circle cx="23" cy="42" r="15" fill="#ff9a1f" stroke="#b33a0e" stroke-width="2.5"/><circle cx="23" cy="42" r="10" fill="#ffd166"/><circle cx="20" cy="45" r="4.5" fill="#fff6d0"/></svg>',
   turbo: '<svg viewBox="0 0 64 64"><path d="M36 4 12 36h16l-6 24 30-36H35z" fill="#ffc93c" stroke="#14213d" stroke-width="3" stroke-linejoin="round"/></svg>',
+  bubble: '<svg viewBox="0 0 64 64"><defs><radialGradient id="bubG" cx="0.5" cy="0.5" r="0.5"><stop offset="0.55" stop-color="#e8f8ff" stop-opacity="0.2"/><stop offset="0.85" stop-color="#8fd3ff" stop-opacity="0.7"/><stop offset="1" stop-color="#c77dff"/></radialGradient></defs><circle cx="32" cy="32" r="27" fill="url(#bubG)" stroke="#5aa9e6" stroke-width="2.5"/><path d="M17 26a16 16 0 0 1 13-11" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/><circle cx="44" cy="44" r="3" fill="#fff"/></svg>',
+  magnet: '<svg viewBox="0 0 64 64"><path d="M12 8h14v26a6 6 0 0 0 12 0V8h14v26a20 20 0 0 1-40 0z" fill="#ef476f" stroke="#14213d" stroke-width="3" stroke-linejoin="round"/><path d="M12 8h14v10H12zM38 8h14v10H38z" fill="#dfe6ee" stroke="#14213d" stroke-width="3" stroke-linejoin="round"/><path d="M6 50l-4 4M58 50l4 4M32 60v4" stroke="#ffc93c" stroke-width="3" stroke-linecap="round"/></svg>',
+  cloud: '<svg viewBox="0 0 64 64"><path d="M16 40a10 10 0 0 1 2-20 14 14 0 0 1 26-3 10 10 0 0 1 6 19 8 8 0 0 1-6 4z" fill="#f4f7fb" stroke="#5b6b88" stroke-width="3" stroke-linejoin="round"/><circle cx="27" cy="28" r="2.4" fill="#14213d"/><circle cx="39" cy="28" r="2.4" fill="#14213d"/><path d="M29 33q4 3 8 0" fill="none" stroke="#14213d" stroke-width="2" stroke-linecap="round"/><path d="M20 47l-3 7M32 47l-3 7M44 47l-3 7" stroke="#3a86ff" stroke-width="3.5" stroke-linecap="round"/></svg>',
 };
-const ITEM_NAMES = { fire: 'Oheň', icecream: 'Zmrzlina', turbo: 'Turbo' };
+const ITEM_NAMES = { fire: 'Oheň', icecream: 'Zmrzlina', turbo: 'Turbo', bubble: 'Bublina', magnet: 'Magnet', cloud: 'Mráček' };
 
 const qTex = canvasTex(128, 128, (g, w, h) => {
   const gr = g.createLinearGradient(0, 0, w, h);
@@ -24,15 +27,21 @@ const qTex = canvasTex(128, 128, (g, w, h) => {
 const boxMat = new THREE.MeshStandardMaterial({ map: qTex, emissive: 0xffffff, emissiveMap: qTex, emissiveIntensity: 0.35, transparent: true, opacity: 0.92, roughness: 0.3 });
 const boxGeo = new THREE.BoxGeometry(1.7, 1.7, 1.7);
 const boxes = [];
-for (const f of [0.17, 0.46, 0.73]) {
-  const i = Math.floor(N * f);
-  for (const lat of [-6.5, -2.2, 2.2, 6.5]) {
-    const m = mesh(boxGeo, boxMat);
-    m.position.set(P[i].x + S[i].x * lat, 1.3, P[i].z + S[i].z * lat);
-    m.rotation.set(rnd(0, 3), rnd(0, 3), 0);
-    scene.add(m);
-    boxes.push({ m, respawn: 0 });
-  }
+for (let n = 0; n < 12; n++) {
+  const m = mesh(boxGeo, boxMat);
+  m.rotation.set(rnd(0, 3), rnd(0, 3), 0);
+  scene.add(m);
+  boxes.push({ m, respawn: 0 });
+}
+// Three rows of four boxes across the road of the current circuit
+const BOX_ROWS = [0.17, 0.46, 0.73];
+function placeBoxes() {
+  BOX_ROWS.forEach((f, r) => {
+    const i = Math.floor(N * f);
+    [-6.5, -2.2, 2.2, 6.5].forEach((lat, c) => {
+      boxes[r * 4 + c].m.position.set(P[i].x + S[i].x * lat, 1.3, P[i].z + S[i].z * lat);
+    });
+  });
 }
 
 // Shared by every thrown hedgehog, since there are a lot of them now
@@ -194,4 +203,53 @@ function makeIceCream() {
   return g;
 }
 
-export { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, animateFireball, makeIceCream };
+// A soap bubble around a kart: clear in the middle, rainbow-tinted and bright towards the rim
+const bubbleMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false,
+  uniforms: { t: { value: 0 }, fade: { value: 1 } },
+  vertexShader: 'varying vec3 vN; varying vec3 vV; varying vec3 vP; void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); vP = position; gl_Position = projectionMatrix * mv; }',
+  fragmentShader: 'uniform float t; uniform float fade; varying vec3 vN; varying vec3 vV; varying vec3 vP; void main(){ float f = 1.0 - abs(dot(vN, vV)); float h = vP.y * 1.3 + vP.x * 0.7 + t * 0.6; vec3 rainbow = 0.6 + 0.4 * cos(6.2832 * (h + vec3(0.0, 0.33, 0.67))); vec3 c = mix(vec3(0.85, 0.95, 1.0), rainbow, 0.55); float spec = pow(max(dot(reflect(-vV, vN), normalize(vec3(-0.4, 0.8, 0.4))), 0.0), 40.0); gl_FragColor = vec4(c + spec, (0.06 + pow(f, 2.5) * 0.75 + spec) * fade); }',
+});
+const BUBBLE_GEO = new THREE.SphereGeometry(2.3, 32, 20);
+function makeBubble() {
+  const m = new THREE.Mesh(BUBBLE_GEO, bubbleMat.clone());
+  m.position.y = 1.2;
+  m.renderOrder = 2;
+  return m;
+}
+// A horseshoe magnet that hovers over the kart while it pulls hedgehogs in
+function makeMagnet() {
+  const g = new THREE.Group();
+  const red = std(0xef476f, { roughness: 0.35 }), steel = std(0xdfe6ee, { metalness: 0.6, roughness: 0.25 });
+  const arc = mesh(new THREE.TorusGeometry(0.55, 0.22, 10, 20, Math.PI), red);
+  arc.rotation.z = Math.PI;
+  g.add(arc);
+  for (const s of [-1, 1]) {
+    const leg = mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.5, 12), red); leg.position.set(s * 0.55, 0.25, 0); g.add(leg);
+    const tip = mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.3, 12), steel); tip.position.set(s * 0.55, 0.65, 0); g.add(tip);
+  }
+  g.rotation.x = Math.PI;
+  const outer = new THREE.Group();
+  outer.add(g);
+  g.position.y = 0.4;
+  return outer;
+}
+// A little rain cloud with a friendly face (local +z) that drizzles on whoever is in the lead
+function makeRainCloud() {
+  const g = new THREE.Group();
+  // a little self-lit so it stays white even with the sun behind it
+  const white = std(0xf4f7fb, { roughness: 0.9, emissive: col(0x8c96a8) }), grey = std(0xc9d3e3, { roughness: 0.9, emissive: col(0x6c7688) });
+  for (const [x, y, z, r, m] of [[0, 0, 0, 1.3, white], [-1.2, -0.2, 0, 0.95, white], [1.2, -0.15, 0, 1.0, white], [0.5, 0.6, -0.3, 0.9, white], [-0.6, 0.5, -0.4, 0.8, white], [0, -0.45, -0.3, 1.1, grey]]) {
+    const b = mesh(ICE_SPH, m); b.position.set(x, y, z); b.scale.setScalar(r); g.add(b);
+  }
+  for (const sx of [-1, 1]) {
+    const e = mesh(ICE_SPH, ICE.black); e.position.set(sx * 0.38, 0.12, 1.22); e.scale.set(0.12, 0.16, 0.06); g.add(e);
+    const b = mesh(ICE_SPH, ICE.blush); b.position.set(sx * 0.72, -0.12, 1.08); b.scale.set(0.16, 0.09, 0.05); g.add(b);
+  }
+  const smile = mesh(ICE_SMILE, ICE.mouth); smile.scale.setScalar(1.3); smile.position.set(0, -0.12, 1.27); smile.rotation.z = Math.PI; g.add(smile);
+  g.scale.setScalar(0.75);
+  scene.add(g);
+  return g;
+}
+
+export { ICONS, ITEM_NAMES, boxes, BOX_ROWS, placeBoxes, makeHog, makeFireball, animateFireball, makeIceCream, makeBubble, makeMagnet, makeRainCloud };

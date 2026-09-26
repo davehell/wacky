@@ -21,14 +21,27 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
 
 - šest jezdců — žralok, žirafa, jelen, žabák, zajíček a slonice, každý s jinou rychlostí,
   zrychlením a ovládáním
-- Slunečný okruh na tři kola proti pěti soupeřům
+- tři tratě na tři kola proti pěti soupeřům: Slunečný okruh, Zasněžené údolí s kluzkým ledem
+  a sněžením a Pouštní kaňon s písečnými závějemi, které brzdí
+- skoky přes můstky na každé trati (po dopadu malé turbo) a hliněná zkratka se seníky, která
+  se vyplatí hlavně s turbem
+- pohár: všechny tři tratě za sebou, body za umístění (10, 8, 6, 4, 2, 1) a zlatý, stříbrný
+  nebo bronzový pohár na konci
+- jezdci reagují: po zásahu jim kolem hlavy krouží hvězdičky, střelec zavolá „Jupí!“, soupeř,
+  který tě předjede, se ohlédne a zamává „Pa pa!“, a ten, koho předjedeš, řekne „Jejda!“
+- v cíli pódium pro první tři: každé zvíře slaví po svém, padají konfety a vítěz poháru dostane
+  zlatý pohár
 - drift s turbem (modré a oranžové jiskry), raketový start
 - ježci na trati jako v původní hře: přejetím je sebereš (až 10) a pak je házíš — kutálí se za soupeřem
   před tebou; každý ježek zrovna něco dělá (sedí na záchodě, čte noviny, spí, hraje na kytaru…)
   a činnosti se střídají
-- krabice s otazníkem: oheň (tři ohnivé koule), zmrzlina (past za sebe), turbo
+- krabice s otazníkem: oheň (tři ohnivé koule), zmrzlina (past na trati), turbo, bublina (ochrání
+  před jedním zásahem), magnet (přitáhne ježky z okolí) a mráček (doletí k vedoucímu jezdci
+  a chvíli na něj prší, takže zpomalí)
 - třídy 50 / 100 / 150 cc a dětský režim, minimapa, osobní rekordy
 - syntetizovaný zvuk motoru s řazením, motory soupeřů s dopplerovým efektem
+- veselá hudba, která se skládá přímo ve hře: každá trať, menu i pódium mají svou melodii, hlavní
+  motiv zůstává a ostatní části se při každém opakování trochu obmění; v posledním kole zrychlí
 - ovládání klávesnicí, gamepadem i dotykem
 
 ## Ovládání
@@ -41,6 +54,7 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
 | Shift                | drift — drž v zatáčce, puštěním získáš turbo                |
 | Esc                  | pauza                                                       |
 | M                    | zvuk zapnout / vypnout                                      |
+| H                    | hudbu zapnout / vypnout                                     |
 
 Gamepad: RT plyn, LT brzda, RB drift, X nebo Y střelba.
 

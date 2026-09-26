@@ -20,12 +20,14 @@ The audience is children: characters must be cute and recognisable at a glance, 
 | `src/styles.css`    | all styles; colours as custom properties on `:root`                                |
 | `src/util.js`       | small helpers (`clamp`, `col`, `store`…)                                           |
 | `src/render.js`     | renderer, scene, camera, sky, sun, `canvasTex`, material cache `std`, `mesh`       |
-| `src/track.js`      | the circuit (spline, road, curbs, fences), scenery, track queries (`nearest`…)     |
+| `src/track.js`      | the circuits (spline, road, curbs, fences, surfaces), scenery, track queries       |
 | `src/characters.js` | the six animal drivers, their karts and menu portraits                             |
 | `src/items.js`      | item boxes, hedgehog projectile, fireball, ice-cream hazard, HUD icons             |
 | `src/hedgehogs.js`  | hedgehogs sitting on the road as ammo pickups, their activities and props         |
+| `src/podium.js`     | the podium after the finish: blocks, confetti, the cup and each animal's cheering  |
 | `src/particles.js`  | pooled additive particles                                                          |
 | `src/audio.js`      | Web Audio: synthesised engine, opponents' engines with doppler, wind, skid, sfx    |
+| `src/music.js`      | background music composed on the fly: songs, instruments, scheduler                |
 | `src/main.js`       | game state, input, kart physics, AI, HUD, menu, main loop                          |
 | `public/`           | PWA files copied as they are: `manifest.webmanifest`, service worker `sw.js`, icons |
 | `tools/`            | dev-only pages, not part of the build: `icon.html` renders the app icon            |
