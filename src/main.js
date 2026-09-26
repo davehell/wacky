@@ -6,7 +6,7 @@ import { CHARS, makeKart, makePortraits } from './characters.js';
 import { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, animateFireball, makeIceCream } from './items.js';
 import { MAX_HOGS, hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
 import { parts, emit, updateParticles, burst } from './particles.js';
-import { initAudio, sfx, setEngine, updateOpponents, silenceEngine, toggleMute } from './audio.js';
+import { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
 /* ================= Game state ================= */
 // Opponents carry only a few hedgehogs and take turns at the player, so a leader is never pelted non-stop
@@ -484,6 +484,7 @@ function showBest() {
 function show(id, on) { $(id).hidden = !on; }
 function startRace() {
   initAudio();
+  setGearBase(CC[cls()].base);
   placeGrid();
   for (const p of projectiles) scene.remove(p.mesh);
   for (const h of hazards) scene.remove(h.m);

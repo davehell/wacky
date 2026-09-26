@@ -4,7 +4,11 @@ import { W } from './track.js';
 /* ================= Audio ================= */
 let AC = null, master = null, sfxBus = null, noiseBuf = null, pulse = null, eng = null, muted = store.get('dk-muted') === '1';
 const opp = [];
-const GEARS = [0, 9, 17, 25, 33, 52];
+// Gear boundaries as fractions of the class's top speed. The top gears sit around cruising speed, so
+// bends, bumps and turbos keep the gearbox busy for the whole race instead of only at the start.
+const GEAR_F = [0, 0.14, 0.3, 0.46, 0.62, 0.78, 0.94, 1.1, 1.45];
+let GEARS = GEAR_F.map((f) => f * 36);
+function setGearBase(base) { GEARS = GEAR_F.map((f) => f * base); }
 function initAudio() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   try {
@@ -41,7 +45,7 @@ function initAudio() {
     const v = voice(1200);
     const peak = AC.createBiquadFilter(); peak.type = 'peaking'; peak.frequency.value = 900; peak.gain.value = 4; peak.Q.value = 1;
     v.gain.connect(peak).connect(master);
-    eng = Object.assign(v, { w: 0, gear: 1, shiftT: 0, skid: loopNoise('bandpass', 1500, 3), rumble: loopNoise('lowpass', 420, 0.7), wind: loopNoise('highpass', 900, 0.5) });
+    eng = Object.assign(v, { w: 0, gear: 1, shiftT: 0, skid: loopNoise('bandpass', 1500, 3), rumble: loopNoise('lowpass', 420, 0.7), vs: 0, blipT: 0, load: 0 });
 
     for (let i = 0; i < 5; i++) {
       const o = voice(1400);
@@ -123,12 +127,25 @@ function revOf(v, g) { const lo = GEARS[g - 1], hi = GEARS[g]; return clamp(0.25
 function setEngine(k, throttle, dt, rev = null) {
   if (!eng) return;
   const t = AC.currentTime, v = Math.abs(k.speed), off = Math.abs(k.lat) > W + 1.2;
+  // the gearbox hears a speed that climbs slowly, so the pull through the gears lasts several seconds
+  const top = GEARS[GEARS.length - 3];
+  // a sharp bend "lifts off" a little, dropping a gear on the way in and picking it up on the way out
+  eng.load += (Math.abs(k.st) - eng.load) * Math.min(1, dt * 2);
+  const heard = v * (1 - 0.3 * eng.load);
+  eng.vs = heard > eng.vs ? Math.min(heard, eng.vs + top * 0.12 * dt) : Math.max(heard, eng.vs - top * 0.6 * dt);
   let r;
-  if (rev !== null) r = rev;
+  if (rev !== null) { r = rev; eng.vs = 0; }
   else {
-    const g = gearOf(v);
-    if (g !== eng.gear) { if (g > eng.gear) { eng.shiftT = 0.14; sfx.shift(); } eng.gear = g; }
-    r = revOf(v, g);
+    let g = gearOf(eng.vs);
+    // hold the gear through small dips so it does not hunt up and down
+    if (g === eng.gear - 1 && eng.vs > GEARS[g] - top * 0.015) g = eng.gear;
+    if (g !== eng.gear) {
+      if (g > eng.gear) { eng.shiftT = 0.16; sfx.shift(); } else eng.blipT = 0.18;
+      eng.gear = g;
+    }
+    r = revOf(eng.vs, g);
+    // a downshift blips the throttle
+    if (eng.blipT > 0) r += 0.18;
     if (k.drifting) r += 0.1;
     if (k.boost > 0) r += 0.14;
     if (k.y > 0.05) r += 0.12;
@@ -136,6 +153,7 @@ function setEngine(k, throttle, dt, rev = null) {
     r -= Math.abs(k.st) * 0.05;
   }
   eng.shiftT = Math.max(0, eng.shiftT - dt);
+  eng.blipT = Math.max(0, eng.blipT - dt);
   eng.w += (Math.random() - 0.5) * dt * 0.5;
   eng.w *= 1 - dt * 0.6;
   eng.w = clamp(eng.w, -0.04, 0.04);
@@ -148,7 +166,6 @@ function setEngine(k, throttle, dt, rev = null) {
   eng.skid.g.gain.setTargetAtTime(k.drifting ? 0.04 : 0, t, 0.05);
   eng.skid.f.frequency.setTargetAtTime(1300 + v * 12 + Math.sin(t * 9) * 150, t, 0.05);
   eng.rumble.g.gain.setTargetAtTime(off ? clamp(v / 20, 0, 1) * 0.12 : 0, t, 0.08);
-  eng.wind.g.gain.setTargetAtTime(Math.pow(clamp(v / 45, 0, 1.4), 2) * 0.035 * (1 + Math.sin(t * 0.7) * 0.4), t, 0.2);
 }
 // heading: camera yaw, used to pan opponents left or right
 function updateOpponents(listener, others, heading) {
@@ -172,7 +189,7 @@ function updateOpponents(listener, others, heading) {
 function silenceEngine(fade = 0.05) {
   if (!eng) return;
   const t = AC.currentTime;
-  for (const n of [eng.gain, eng.skid.g, eng.rumble.g, eng.wind.g, ...opp.map((o) => o.gain)]) n.gain.setTargetAtTime(0, t, fade);
+  for (const n of [eng.gain, eng.skid.g, eng.rumble.g, ...opp.map((o) => o.gain)]) n.gain.setTargetAtTime(0, t, fade);
 }
 function drawMuteIcon() {
   $('#muteIcon').innerHTML = '<path d="M3 7h3l5-4v14l-5-4H3z" fill="currentColor"/>' +
@@ -186,4 +203,4 @@ function toggleMute() {
 }
 drawMuteIcon();
 
-export { initAudio, sfx, setEngine, updateOpponents, silenceEngine, toggleMute };
+export { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute };
