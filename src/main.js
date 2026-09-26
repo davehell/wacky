@@ -322,6 +322,15 @@ let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1, lastDrift = 0;
   $('#hogIcon').innerHTML = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
 }
 function showMsg(t, dur = 1.3) { el.msg.textContent = t; el.msg.classList.remove('pop'); void el.msg.offsetWidth; el.msg.classList.add('pop'); el.msg.hidden = false; msgTimer = dur; }
+const itemPop = $('#itemPop');
+let itemPopTimer = 0;
+function showItemPop(it) {
+  $('#itemPopIcon').innerHTML = ICONS[it];
+  $('#itemPopName').textContent = ITEM_NAMES[it] + '!';
+  itemPop.hidden = true; void itemPop.offsetWidth; itemPop.hidden = false;
+  clearTimeout(itemPopTimer);
+  itemPopTimer = setTimeout(() => { itemPop.hidden = true; }, 1400);
+}
 function setText(key, node, v) { if (lastHud[key] !== v) { node.textContent = v; lastHud[key] = v; } }
 const ranked = () => karts.slice().sort((a, b) => (b.finished ? 1e9 - b.finishTime : b.prog) - (a.finished ? 1e9 - a.finishTime : a.prog));
 
@@ -340,7 +349,7 @@ function updateHud(dt) {
   if (slot !== lastSlot) {
     el.slot.innerHTML = slot ? ICONS[slot] : '';
     el.slotLabel.textContent = slot ? ITEM_NAMES[slot] : 'Prázdné';
-    if (slot) { el.slot.classList.remove('pop'); void el.slot.offsetWidth; el.slot.classList.add('pop'); }
+    if (slot) { el.slot.classList.remove('pop'); void el.slot.offsetWidth; el.slot.classList.add('pop'); showItemPop(slot); }
     lastSlot = slot;
   }
   const ch = player.drifting ? player.driftCharge : 0;
@@ -450,7 +459,7 @@ function startRace() {
   state = 'countdown'; paused = false;
   camH = player.h;
   lastHud = {}; lastSlot = '-'; lastHogs = -1; lastDrift = 0;
-  el.msg.hidden = true; el.cd.hidden = true;
+  el.msg.hidden = true; el.cd.hidden = true; itemPop.hidden = true;
   show('#menu', false); show('#results', false); show('#pause', false); show('#hud', true); show('#touch', isTouch);
   requestAnimationFrame(setupMini);
 }
