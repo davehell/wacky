@@ -32,15 +32,12 @@ body {
   position: absolute; left: 50%; top: calc(12px + env(safe-area-inset-top, 0px)); transform: translateX(-50%);
   display: flex; gap: 14px; align-items: flex-start;
 }
-.hud__race { display: flex; flex-direction: column; gap: 6px; align-items: center; }
-.pos { font-family: var(--display); font-size: clamp(46px, 5.6vw, 76px); line-height: 1; display: flex; align-items: baseline; gap: 6px; }
-.pos small { font-size: 0.38em; }
-.chip {
-  background: var(--paper); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  border-radius: 999px; padding: 6px 14px; font-weight: 800; font-variant-numeric: tabular-nums;
-  display: flex; gap: 14px; box-shadow: 0 3px 0 rgba(20, 33, 61, 0.25);
+/* big numbers a child can read at a glance, as tall as the boxes next to them */
+.stat {
+  font-family: var(--display); font-size: clamp(52px, 6.4vw, 84px); line-height: 84px; height: 84px;
+  min-width: 84px; text-align: center; font-variant-numeric: tabular-nums;
 }
-.chip span { color: var(--ink-soft); font-weight: 600; margin-right: 4px; text-transform: uppercase; font-size: 11px; letter-spacing: 0.08em; }
+.stat--lap { font-size: clamp(40px, 4.8vw, 62px); }
 .hud__tr { position: absolute; right: calc(20px + env(safe-area-inset-right, 0px)); top: calc(16px + env(safe-area-inset-top, 0px)); }
 .slot {
   width: 84px; height: 84px; border-radius: 20px; background: var(--paper);
@@ -78,9 +75,7 @@ body {
   background: var(--paper); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 4px 0 rgba(20, 33, 61, 0.3);
 }
 .hud__bl { position: absolute; left: calc(20px + env(safe-area-inset-left, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
-.speed { font-family: var(--display); font-size: clamp(38px, 4.4vw, 60px); line-height: 1; font-variant-numeric: tabular-nums; }
-.speed small { font-size: 0.35em; margin-left: 4px; }
-.drift-meter { margin-top: 8px; width: 160px; height: 10px; border-radius: 99px; background: rgba(20, 33, 61, 0.35); overflow: hidden; }
+.drift-meter { width: 160px; height: 10px; border-radius: 99px; background: rgba(20, 33, 61, 0.35); overflow: hidden; }
 .drift-meter i { display: block; height: 100%; width: 0; background: #7fd3ff; border-radius: 99px; transition: background 0.2s; }
 
 .msg {
@@ -172,7 +167,8 @@ body.is-touch .hud__br { bottom: calc(110px + env(safe-area-inset-bottom, 0px));
   .panel { left: 16px; right: 16px; top: 16px; bottom: 16px; width: auto; padding: 22px 18px; }
   .panel--center { left: 16px; right: 16px; top: 50%; transform: translateY(-50%); }
   .hud__top { gap: 10px; }
-  .chip { flex-direction: column; gap: 0; border-radius: 14px; padding: 4px 10px; }
+  .stat { line-height: 72px; height: 72px; min-width: 60px; font-size: 48px; }
+  .stat--lap { font-size: 36px; }
   .slot { width: 72px; height: 72px; border-radius: 18px; }
   .slot svg { width: 46px; height: 46px; }
   .touch .tbtn { width: 60px; height: 60px; }

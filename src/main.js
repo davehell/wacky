@@ -314,7 +314,7 @@ function aiInput(k, dt) {
 }
 
 /* ================= HUD ================= */
-const el = { hogs: $('#hogs'), ammo: $('#ammo'), pos: $('#pos'), lap: $('#lap'), time: $('#time'), speed: $('#speed'), slot: $('#slot'), slotLabel: $('#slotLabel'), msg: $('#msg'), cd: $('#cd'), drift: $('#driftBar') };
+const el = { hogs: $('#hogs'), ammo: $('#ammo'), pos: $('#pos'), lap: $('#lap'), slot: $('#slot'), slotLabel: $('#slotLabel'), msg: $('#msg'), cd: $('#cd'), drift: $('#driftBar') };
 const fmt = (t) => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(2).padStart(5, '0')}`; };
 let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1;
 {
@@ -329,8 +329,6 @@ function updateHud(dt) {
   const rank = ranked().indexOf(player) + 1;
   setText('pos', el.pos, player.finished ? `${player.place}.` : `${rank}.`);
   setText('lap', el.lap, `${clamp(player.lap + 1, 1, LAPS)}/${LAPS}`);
-  setText('time', el.time, fmt(player.finished ? player.finishTime : raceTime));
-  setText('speed', el.speed, String(Math.round(Math.abs(player.speed) * 3.6)));
   if (player.hogs !== lastHogs) {
     el.hogs.textContent = String(player.hogs);
     el.ammo.classList.toggle('empty', player.hogs === 0);
