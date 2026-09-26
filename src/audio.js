@@ -12,10 +12,18 @@ const PLAYER_ENGINE_VOL = 0.2;
 const GEAR_F = [0, 0.14, 0.3, 0.46, 0.62, 0.78, 0.94, 1.1, 1.45];
 let GEARS = GEAR_F.map((f) => f * 36);
 function setGearBase(base) { GEARS = GEAR_F.map((f) => f * base); }
+// On iPhone and iPad (every browser there, Chrome included, runs on WebKit) Web Audio is silenced by
+// the silent mode unless the page asks for media playback, and the context starts, or after a trip to
+// the background ends up, suspended or "interrupted" until it is resumed from a touch.
+if (navigator.audioSession) navigator.audioSession.type = 'playback';
+const wake = () => { if (AC && AC.state !== 'running') AC.resume(); };
+for (const ev of ['pointerdown', 'touchend', 'keydown']) addEventListener(ev, wake, true);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
 function initAudio() {
-  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  if (AC) { wake(); return; }
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
+    AC.resume();
     const comp = AC.createDynamicsCompressor();
     comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 4;
     master = AC.createGain(); master.gain.value = muted ? 0 : 0.8;
