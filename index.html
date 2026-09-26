@@ -41,7 +41,7 @@
     <svg class="bolt bolt--1" id="bolt1" viewBox="0 0 64 64"><defs><clipPath id="boltClip1"><rect x="0" y="64" width="64" height="0"/></clipPath></defs><path class="bolt__back" d="M36 4 12 36h16l-6 24 30-36H35z"/><path class="bolt__fill" clip-path="url(#boltClip1)" d="M36 4 12 36h16l-6 24 30-36H35z"/><path class="bolt__line" d="M36 4 12 36h16l-6 24 30-36H35z"/></svg>
     <svg class="bolt bolt--2" id="bolt2" viewBox="0 0 64 64"><defs><clipPath id="boltClip2"><rect x="0" y="64" width="64" height="0"/></clipPath></defs><path class="bolt__back" d="M36 4 12 36h16l-6 24 30-36H35z"/><path class="bolt__fill" clip-path="url(#boltClip2)" d="M36 4 12 36h16l-6 24 30-36H35z"/><path class="bolt__line" d="M36 4 12 36h16l-6 24 30-36H35z"/></svg>
   </div>
-  <div class="hud__br"><canvas id="mini" aria-label="Mapa trati"></canvas></div>
+  <div class="hud__tl"><canvas id="mini" aria-label="Mapa trati"></canvas></div>
   <div class="item-pop" id="itemPop" hidden><div class="item-pop__icon" id="itemPopIcon"></div><b class="outline" id="itemPopName"></b></div>
   <div class="msg outline" id="msg"></div>
   <div class="cd outline" id="cd"></div>
@@ -102,13 +102,14 @@
 </section>
 
 <div class="touch" id="touch" hidden>
-  <div class="grp">
+  <button class="tbtn tbtn--drift race-only" data-t="drift">Drift</button>
+  <!-- bottom centre: a wide fire button sitting on top of the two steering arrows -->
+  <div class="pad">
     <button class="tbtn tbtn--fire" data-t="fire" aria-label="Střílet"><svg viewBox="0 0 64 64"><path d="M22 54C10 52 8 38 16 30L58 4 42 24 62 18 44 36 60 36 34 54z" fill="#ff7b25" stroke="#b33a0e" stroke-width="2.5" stroke-linejoin="round"/><path d="M24 46 48 16 38 30 52 28 36 42z" fill="#ffd166"/><circle cx="23" cy="42" r="15" fill="#ff9a1f" stroke="#b33a0e" stroke-width="2.5"/><circle cx="23" cy="42" r="10" fill="#ffd166"/><circle cx="20" cy="45" r="4.5" fill="#fff6d0"/></svg></button>
-    <button class="tbtn race-only" data-t="drift">Drift</button>
-  </div>
-  <div class="grp">
-    <button class="tbtn" data-t="left" aria-label="Doleva"><svg viewBox="0 0 30 30"><path d="M19 5 8 15l11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-    <button class="tbtn" data-t="right" aria-label="Doprava"><svg viewBox="0 0 30 30"><path d="m11 5 11 10-11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="pad__row">
+      <button class="tbtn" data-t="left" aria-label="Doleva"><svg viewBox="0 0 30 30"><path d="M19 5 8 15l11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="tbtn" data-t="right" aria-label="Doprava"><svg viewBox="0 0 30 30"><path d="m11 5 11 10-11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
   </div>
 </div>
 

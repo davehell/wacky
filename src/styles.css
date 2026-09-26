@@ -71,7 +71,7 @@ body {
 .icon-btn svg { width: 20px; height: 20px; }
 .icon-btn--menu { position: absolute; top: 18px; right: 18px; flex: none; background: #fff; }
 .icon-btn--menu + .eyebrow { padding-right: 48px; }
-.hud__br { position: absolute; right: calc(20px + env(safe-area-inset-right, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+.hud__tl { position: absolute; left: calc(20px + env(safe-area-inset-left, 0px)); top: calc(16px + env(safe-area-inset-top, 0px)); }
 #mini {
   width: clamp(140px, 16vw, 220px); aspect-ratio: 1; max-width: 100%; border-radius: 22px; display: block;
   background: var(--paper); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 4px 0 rgba(20, 33, 61, 0.3);
@@ -182,32 +182,43 @@ kbd { font: 700 11px var(--body); background: #fff; border: 1px solid var(--line
 .results .est { color: var(--ink-soft); font-weight: 600; }
 
 /* ---------- Touch ---------- */
-.touch { position: fixed; inset: auto 0 0 0; padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: space-between; pointer-events: none; }
-.touch .grp { display: flex; gap: 12px; pointer-events: auto; align-items: flex-end; }
+/* the fire button and the two arrows under it sit together at the bottom centre, big enough for a
+   child's thumbs; --b is the size of one arrow button, --g the gap between the buttons */
+.touch { position: fixed; inset: auto 0 0 0; padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px)); pointer-events: none; }
+.pad { --b: 104px; --g: 14px; width: max-content; margin: 0 auto; display: grid; gap: var(--g); pointer-events: auto; }
+body.is-kid .pad { --b: 136px; }
+.pad__row { display: flex; gap: var(--g); }
 .tbtn {
   width: 74px; height: 74px; border-radius: 50%; border: 3px solid #fff; background: rgba(20, 33, 61, 0.45); color: #fff;
   font: 800 12px var(--body); letter-spacing: 0.06em; text-transform: uppercase; display: grid; place-items: center;
+  touch-action: none; -webkit-tap-highlight-color: transparent;
 }
-body.is-kid .tbtn { width: 96px; height: 96px; }
+.pad .tbtn { width: var(--b); height: var(--b); }
+.pad .tbtn svg { width: 40%; height: 40%; }
+.tbtn--drift { position: absolute; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); pointer-events: auto; }
 body.is-kid .race-only, body:not(.is-kid) .kid-only { display: none; }
 .tbtn.on { background: rgba(255, 201, 60, 0.85); color: var(--ink); }
 .tbtn svg { width: 30px; height: 30px; }
-/* the shoot button: bigger than the rest, a plain glossy red disc with a soft highlight and a
-   fireball icon instead of a label so it reads as "shoot" at a glance */
-.tbtn--fire {
-  width: 96px; height: 96px; border: none;
-  background: radial-gradient(circle at 34% 30%, #ff6b5f 0%, #ea3323 48%, #c21c1c 100%);
+/* the shoot button: as wide as the two arrows below it, a glossy red pill with a fireball on it */
+.pad .tbtn--fire {
+  width: calc(var(--b) * 2 + var(--g)); height: calc(var(--b) * 0.72); border-radius: 999px; border: none;
+  background: radial-gradient(ellipse at 34% 28%, #ff6b5f 0%, #ea3323 52%, #c21c1c 100%);
   box-shadow: 0 3px 8px rgba(20, 33, 61, 0.4), inset 0 -4px 6px rgba(0, 0, 0, 0.2), inset 0 3px 4px rgba(255, 255, 255, 0.35);
   transition: transform 0.08s, box-shadow 0.08s;
 }
-.tbtn--fire svg { width: 58%; height: 58%; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3)); }
-.tbtn--fire.on {
-  color: #fff; transform: scale(0.94);
+.pad .tbtn--fire svg { width: auto; height: 78%; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3)); }
+.pad .tbtn--fire.on {
+  background: radial-gradient(ellipse at 34% 28%, #ff6b5f 0%, #ea3323 52%, #c21c1c 100%); transform: scale(0.96);
   box-shadow: 0 1px 3px rgba(20, 33, 61, 0.4), inset 0 -2px 4px rgba(0, 0, 0, 0.25), inset 0 2px 3px rgba(255, 255, 255, 0.25);
 }
-body.is-kid .tbtn--fire { width: 128px; height: 128px; }
-body.is-touch .hud__br { bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
-body.is-touch.is-kid .hud__br { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+/* the drift bolts move up out of the way of the pad */
+body.is-touch .drift { bottom: calc(210px + env(safe-area-inset-bottom, 0px)); }
+
+/* on narrow screens the map would collide with the numbers at the top, so it drops below them */
+@media (max-width: 720px) {
+  .hud__tl { top: calc(130px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); }
+  #mini { width: 110px; border-radius: 16px; }
+}
 
 @media (max-width: 640px) {
   .panel { left: 16px; right: 16px; top: 16px; bottom: 16px; width: auto; padding: 22px 18px; }
@@ -217,10 +228,10 @@ body.is-touch.is-kid .hud__br { bottom: calc(150px + env(safe-area-inset-bottom,
   .stat--lap { font-size: 36px; }
   .slot { width: 72px; height: 72px; border-radius: 18px; }
   .slot svg { width: 46px; height: 46px; }
-  .touch .tbtn { width: 60px; height: 60px; }
-  body.is-kid .touch .tbtn { width: 84px; height: 84px; }
-  .touch .tbtn--fire { width: 78px; height: 78px; }
-  body.is-kid .touch .tbtn--fire { width: 108px; height: 108px; }
+  .tbtn--drift { width: 60px; height: 60px; }
+  .pad { --b: 84px; --g: 12px; }
+  body.is-kid .pad { --b: 108px; }
+  body.is-touch .drift { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
   .bolt { width: 72px; height: 72px; }
   .ammo { width: 72px; height: 72px; border-radius: 18px; }
   .ammo svg, .ammo img { width: 50px; height: 50px; }
