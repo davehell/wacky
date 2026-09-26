@@ -126,6 +126,12 @@ const sfx = {
     else { note(1568, 0, 0.16, 'triangle', 0.07); note(2093, 0.06, 0.16, 'triangle', 0.06); note(2637, 0.12, 0.3, 'triangle', 0.05); }
   },
   shift: () => whoosh(0, 0.09, 'bandpass', 2500, 1200, 0.05, 2),
+  // the podium: soft applause and cheering, with a little fanfare when the player is on it
+  cheer: (fanfare) => {
+    for (let i = 0; i < 70; i++) whoosh(Math.random() * 2.6, 0.04, 'bandpass', 1800 + Math.random() * 1200, 1400, 0.025 + Math.random() * 0.02, 1.5);
+    whoosh(0, 1.6, 'bandpass', 600, 1100, 0.05, 0.8);
+    if (fanfare) [523, 659, 784, 1047, 784, 1047].forEach((f, i) => note(f, 0.1 + i * 0.14 + (i > 3 ? 0.1 : 0), i === 5 ? 0.8 : 0.2, 'triangle', 0.08));
+  },
   // off a jump: a rising "whee"
   jump: () => { note(392, 0, 0.35, 'triangle', 0.07, 784); whoosh(0, 0.4, 'bandpass', 700, 2200, 0.08, 1.2); },
   // and back on the ground: a soft bump with a springy rebound

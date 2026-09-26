@@ -6,6 +6,7 @@ import { CHARS, makeKart, makePortraits } from './characters.js';
 import { ICONS, ITEM_NAMES, boxes, BOX_ROWS, placeBoxes, makeHog, makeFireball, animateFireball, makeIceCream, makeBubble, makeMagnet, makeRainCloud } from './items.js';
 import { MAX_HOGS, hedgehogSpots, placeHedgehogs, pullHedgehogs, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
 import { parts, emit, updateParticles, burst } from './particles.js';
+import { showPodium, hidePodium, podiumOn, updatePodium, podiumCamera } from './podium.js';
 import { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
 /* ================= Game state ================= */
@@ -644,14 +645,18 @@ function showBest() {
 }
 
 function show(id, on) { $(id).hidden = !on; }
-function startRace() {
-  initAudio();
-  setGearBase(CC[cls()].base);
-  placeGrid();
+function clearField() {
   for (const p of projectiles) scene.remove(p.mesh);
   for (const h of hazards) scene.remove(h.m);
   for (const c of rainClouds) scene.remove(c.m);
   projectiles.length = hazards.length = rainClouds.length = 0;
+}
+function startRace() {
+  initAudio();
+  hidePodium();
+  setGearBase(CC[cls()].base);
+  placeGrid();
+  clearField();
   for (const b of boxes) { b.respawn = 0; b.m.visible = true; }
   resetHedgehogs();
   for (const q of parts) q.life = 0;
@@ -677,6 +682,7 @@ function nextRound() {
 function toMenu() {
   if (cup) { cup = null; selectTrack(clamp(Number(store.get('dk-track')) || 0, 0, TRACKS.length - 1)); }
   state = 'menu'; paused = false;
+  hidePodium(); clearField();
   show('#hud', false); show('#results', false); show('#pause', false); show('#touch', false); show('#menu', true);
   placeGrid(); showBest(); silenceEngine();
 }
@@ -737,6 +743,14 @@ function showResults() {
   const key = bestKey(), prev = Number(store.get(key));
   if (!prev || player.finishTime < prev) { store.set(key, String(player.finishTime)); $('#resBest').textContent = `Nový osobní rekord ${tr.in} ${c.in}!`; }
   else $('#resBest').textContent = `Osobní rekord ${tr.in} ${c.in}: ${fmt(prev)}`;
+  // the first three (of the race, or of the whole cup at its end) go up on the podium
+  const order = cup && cup.round === TRACKS.length - 1
+    ? karts.slice().sort((a, b) => cup.pts.get(b) - cup.pts.get(a) || cup.last.get(a) - cup.last.get(b))
+    : rows.map((r) => r.k);
+  clearField();
+  showPodium(order, !!cup && cup.round === TRACKS.length - 1);
+  podiumCamera(camera.position, camLook, camera.aspect);
+  sfx.cheer(order.indexOf(player) < 3);
   show('#results', true);
   $('#againBtn').focus();
 }
@@ -957,6 +971,14 @@ function simulate(dt) {
 }
 
 function updateCamera(dt) {
+  if (podiumOn()) {
+    podiumCamera(camTarget, camLook, camera.aspect);
+    camera.position.lerp(camTarget, 1 - Math.exp(-3 * dt));
+    camera.lookAt(camLook);
+    camera.fov += (50 - camera.fov) * Math.min(1, dt * 3);
+    camera.updateProjectionMatrix();
+    return;
+  }
   if (state === 'menu') {
     const k = player, a = gTime * 0.35;
     camTarget.set(k.x + Math.sin(a) * 7.5, 3.2, k.z + Math.cos(a) * 7.5);
@@ -989,7 +1011,8 @@ function frameUpdate(dt) {
     const steps = dt > 1 / 50 ? 2 : 1;
     for (let s = 0; s < steps; s++) simulate(dt / steps);
     updateHedgehogs(dt, camera.position);
-    for (const k of karts) syncKart(k, state === 'menu' || state === 'countdown' ? 0 : dt);
+    if (podiumOn()) updatePodium(dt, gTime);
+    else for (const k of karts) syncKart(k, state === 'menu' || state === 'countdown' ? 0 : dt);
     if (state === 'menu') player.v.head.rotation.y = Math.sin(gTime * 1.3) * 0.4;
     updateParticles(dt);
   }
