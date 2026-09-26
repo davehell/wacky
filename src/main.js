@@ -308,16 +308,33 @@ function targetAhead(k) {
   for (const o of karts) { if (o === k || o.finished) continue; const d = o.prog - k.prog; if (d > 0 && d < bd) { bd = d; best = o; } }
   return best;
 }
+// the nearest karts in front of a flying projectile that can still be knocked over
+function nextVictim(pr) {
+  let best = null, bd = 90;
+  for (const o of karts) {
+    if (o === pr.owner || o.finished || o.spin > 0) continue;
+    const d = (o.idx - pr.idx + N) % N;
+    if (d < bd) { bd = d; best = o; }
+  }
+  return best;
+}
 function useItem(k) {
   const it = k.item;
   if (!it) return;
   k.item = null;
   if (it === 'turbo') { k.boost = Math.max(k.boost, 1.6); if (k.isPlayer) sfx.boost(); }
   if (it === 'fire') {
-    // three fireballs fanning out along the road
-    for (const s of [-1, 0, 1]) {
-      projectiles.push({ kind: 'fire', idx: (k.idx + 2) % N, f: 0, lat: k.lat + s * 1.2, latV: s * 6, speed: Math.max(72, k.speed + 34), owner: k, life: 2.6, age: 0, target: null, mesh: makeFireball() });
-    }
+    // three fireballs fanning out along the road. The road is far wider than three fireballs, so the
+    // player's ones each pick one of the nearest karts ahead and home in on it, left ball to the
+    // leftmost; the opponents' ones only fan out, so a player is never swamped by them.
+    const near = k.isPlayer
+      ? karts.filter((o) => o !== k && !o.finished && o.prog > k.prog && (o.prog - k.prog) * SEG < 160)
+        .sort((a, b) => a.prog - b.prog).slice(0, 3).sort((a, b) => a.lat - b.lat)
+      : [];
+    [-1, 0, 1].forEach((s, i) => {
+      const target = near.length ? near[Math.round((i * (near.length - 1)) / 2)] : null;
+      projectiles.push({ kind: 'fire', idx: (k.idx + 2) % N, f: 0, lat: k.lat + s * 1.2, latV: s * 6, speed: Math.max(72, k.speed + 34), owner: k, life: 2.6, age: 0, target, mesh: makeFireball() });
+    });
     if (k.isPlayer) sfx.fire();
   }
   if (it === 'icecream') {
@@ -676,11 +693,13 @@ function simulate(dt) {
     pr.life -= dt; pr.age += dt;
     pr.f += (pr.speed * dt) / SEG;
     while (pr.f >= 1) { pr.f -= 1; pr.idx = (pr.idx + 1) % N; }
-    if (pr.target && !pr.target.finished) {
-      const ahead = (pr.target.idx - pr.idx + N) % N;
-      if (ahead < 90) pr.lat += clamp(pr.target.lat - pr.lat, -16 * dt, 16 * dt);
-    }
     const fire = pr.kind === 'fire';
+    // a homing fireball whose kart is already spinning goes for the next one instead
+    if (fire && pr.target && (pr.target.spin > 0 || pr.target.finished)) pr.target = nextVictim(pr);
+    if (pr.target && !pr.target.finished) {
+      const ahead = (pr.target.idx - pr.idx + N) % N, turn = (fire ? 30 : 16) * dt;
+      if (ahead < 90) pr.lat += clamp(pr.target.lat - pr.lat, -turn, turn);
+    }
     if (pr.kind === 'ice') {
       const i0 = pr.idx, i1 = (pr.idx + 1) % N, u = pr.age / ICE_FLIGHT;
       const x = P[i0].x + (P[i1].x - P[i0].x) * pr.f + S[i0].x * pr.lat, z = P[i0].z + (P[i1].z - P[i0].z) * pr.f + S[i0].z * pr.lat;
@@ -700,7 +719,8 @@ function simulate(dt) {
       }
       continue;
     }
-    if (fire) pr.lat = clamp(pr.lat + pr.latV * dt, -W - 3, W + 3);
+    // a homing fireball only fans out for a moment, then its target steers it
+    if (fire) pr.lat = clamp(pr.lat + (pr.target && pr.age > 0.12 ? 0 : pr.latV) * dt, -W - 3, W + 3);
     const i0 = pr.idx, i1 = (pr.idx + 1) % N;
     const x = P[i0].x + (P[i1].x - P[i0].x) * pr.f + S[i0].x * pr.lat, z = P[i0].z + (P[i1].z - P[i0].z) * pr.f + S[i0].z * pr.lat;
     if (fire) {
@@ -718,10 +738,17 @@ function simulate(dt) {
       pr.mesh.userData.roll.rotation.x += (pr.speed * dt) / 0.6;
       if (Math.random() < 0.5) emit(x, 0.2, z, rnd(-1, 1), rnd(0.5, 2), rnd(-1, 1), 0.4, 0.3, 0.18, 0.4, 2);
     }
+    // tested against the whole path flown since the last frame, so a fast fireball on a slow tablet
+    // cannot hop over a kart between two frames
+    const px = pr.px ?? x, pz = pr.pz ?? z, sx = x - px, sz = z - pz, sl = sx * sx + sz * sz || 1;
+    pr.px = x; pr.pz = z;
     let hit = false;
     for (const k of karts) {
       if ((k === pr.owner && pr.age < 1) || k.y > 1.2) continue;
-      if ((k.x - x) ** 2 + (k.z - z) ** 2 < (fire ? 2.1 : 1.9) ** 2) { hitKart(k, pr.owner, pr.kind); hit = true; break; }
+      // a fireball flies through a kart that is already spinning and goes on to the next one
+      if (fire && k.spin > 0) continue;
+      const u = clamp(((k.x - px) * sx + (k.z - pz) * sz) / sl, 0, 1);
+      if ((k.x - px - sx * u) ** 2 + (k.z - pz - sz * u) ** 2 < (fire ? 2.6 : 1.9) ** 2) { hitKart(k, pr.owner, pr.kind); hit = true; break; }
     }
     if (hit || pr.life <= 0) {
       if (fire) { burst(x, 1, z, 22, 1, 0.45, 0.08); burst(x, 1, z, 10, 1, 0.85, 0.4); }
