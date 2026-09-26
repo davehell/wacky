@@ -137,10 +137,11 @@ function updateOpponents(listener, others, heading) {
     if (o.pan) o.pan.pan.setTargetAtTime(clamp(-(dx * rx + dz * rz) / 12, -0.9, 0.9), t, 0.08);
   });
 }
-function silenceEngine() {
+// fade: time constant in seconds, longer for a gentle fade-out at the finish
+function silenceEngine(fade = 0.05) {
   if (!eng) return;
   const t = AC.currentTime;
-  for (const n of [eng.gain, eng.skid.g, eng.rumble.g, eng.wind.g, ...opp.map((o) => o.gain)]) n.gain.setTargetAtTime(0, t, 0.05);
+  for (const n of [eng.gain, eng.skid.g, eng.rumble.g, eng.wind.g, ...opp.map((o) => o.gain)]) n.gain.setTargetAtTime(0, t, fade);
 }
 function drawMuteIcon() {
   $('#muteIcon').innerHTML = '<path d="M3 7h3l5-4v14l-5-4H3z" fill="currentColor"/>' +

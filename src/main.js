@@ -537,7 +537,7 @@ function simulate(dt) {
     if (k.isPlayer && k.lap > lapBefore && k.lap < LAPS && k.lap > 0) showMsg(k.lap === LAPS - 1 ? 'Poslední kolo!' : `Kolo ${k.lap + 1}`);
     if (!k.finished && k.lap >= LAPS) {
       k.finished = true; k.finishTime = raceTime; k.place = ++finishCount;
-      if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); }
+      if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); silenceEngine(0.4); }
     }
     if (k.isPlayer && !k.finished) {
       const dot = k.vx * T[k.idx].x + k.vz * T[k.idx].z;
@@ -653,8 +653,11 @@ function simulate(dt) {
   }
 
   if (state === 'done') { doneT -= dt; if (doneT <= 0) showResults(); }
-  setEngine(player, player.thr, dt);
-  updateOpponents(player, karts.filter((o) => o !== player), camH);
+  // after the finish line only the fanfare plays, the engines fade out
+  if (state === 'race') {
+    setEngine(player, player.thr, dt);
+    updateOpponents(player, karts.filter((o) => o !== player), camH);
+  }
 }
 
 function updateCamera(dt) {
