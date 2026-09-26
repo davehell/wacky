@@ -233,6 +233,23 @@ function paceMul(k) {
   return skill - clamp((-gap - 12) / 120, 0, 0.5);
 }
 
+// Kids' mode: a kart that wanders far off the road, or turns round the wrong way, is put back
+// in the middle of the road after a moment, with a puff of cloud
+function rescueKid(k, dt) {
+  const lost = Math.abs(k.lat) > W + 6 || k.wrongT > 1.5;
+  k.lostT = lost && k.spin <= 0 ? (k.lostT || 0) + dt : 0;
+  if (k.lostT < 1.2) return;
+  burst(k.x, 1.2, k.z, 24, 1, 1, 1);
+  const i = k.idx, lat = clamp(k.lat, -W * 0.3, W * 0.3);
+  Object.assign(k, {
+    x: P[i].x + S[i].x * lat, z: P[i].z + S[i].z * lat, lat, h: headingAt(i),
+    speed: Math.max(k.speed, 14) * 0.6, y: 0.8, hopV: 3, drifting: false, lostT: 0, wrongT: 0, safe: 1.5,
+  });
+  k.vx = Math.sin(k.h) * k.speed; k.vz = Math.cos(k.h) * k.speed;
+  if (k.isPlayer) { camH = k.h; showMsg('Zpátky na trať!', 1); sfx.pickup(); }
+  burst(k.x, 1.2, k.z, 24, 1, 1, 1);
+}
+
 function hitKart(k, by) {
   if (k.spin > 0 || k.safe > 0) return;
   k.spin = 1.1; k.spinDir = Math.random() < 0.5 ? -1 : 1; k.drifting = false; k.boost = 0;
@@ -560,6 +577,7 @@ function simulate(dt) {
       k.finished = true; k.finishTime = raceTime; k.place = ++finishCount;
       if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); silenceEngine(0.4); }
     }
+    if (k.kid && !k.finished) rescueKid(k, dt);
     if (k.isPlayer && !k.finished) {
       const dot = k.vx * T[k.idx].x + k.vz * T[k.idx].z;
       k.wrongT = dot < -4 ? k.wrongT + dt : 0;
