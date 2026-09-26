@@ -75,9 +75,35 @@ const sfx = {
   pickup: () => { note(1047, 0, 0.16, 'triangle', 0.07); note(1319, 0.06, 0.16, 'triangle', 0.07); note(1568, 0.12, 0.22, 'triangle', 0.07); },
   hit: () => { note(300, 0, 0.3, 'sine', 0.25, 90); whoosh(0, 0.3, 'bandpass', 1600, 300, 0.25, 1.2); note(880, 0.05, 0.12, 'triangle', 0.05, 440); },
   boost: () => { whoosh(0, 0.5, 'bandpass', 500, 3000, 0.3, 1.4); note(330, 0, 0.35, 'triangle', 0.06, 660); },
-  throw: () => whoosh(0, 0.22, 'bandpass', 2200, 600, 0.18, 2),
-  // a soft rising "fwoosh" per fireball
-  fire: () => { [0, 0.06, 0.12].forEach((t) => whoosh(t, 0.4, 'bandpass', 350, 1500, 0.12, 0.9)); note(220, 0, 0.35, 'triangle', 0.05, 440); },
+  // a hedgehog curls up and rolls away: a springy "boing" and a happy squeak
+  throwHog: () => { whoosh(0, 0.22, 'bandpass', 2200, 600, 0.14, 2); note(330, 0, 0.18, 'triangle', 0.09, 660); note(1175, 0.08, 0.14, 'triangle', 0.04, 1760); },
+  // the ice cream pops out of the kart with a cheerful "plop"
+  throwIce: () => { note(520, 0, 0.12, 'sine', 0.12, 1040); note(1040, 0.1, 0.16, 'triangle', 0.05, 1320); whoosh(0.02, 0.4, 'bandpass', 900, 2400, 0.08, 1.5); },
+  // and lands with a soft wet splat
+  splat: () => { whoosh(0, 0.22, 'lowpass', 1800, 250, 0.16, 0.8); note(400, 0, 0.14, 'sine', 0.08, 180); },
+  // a dragon's breath: a rising roar of air and crackling sparks
+  fire: () => {
+    [0, 0.06, 0.12].forEach((t) => whoosh(t, 0.45, 'bandpass', 300, 1800, 0.14, 0.8));
+    whoosh(0, 0.6, 'lowpass', 600, 2400, 0.1, 0.7);
+    for (let i = 0; i < 6; i++) whoosh(0.08 + i * 0.07, 0.05, 'highpass', 3500, 5000, 0.05, 1);
+    note(196, 0, 0.4, 'triangle', 0.06, 392);
+  },
+  // an opponent the player has hit: a comic "bonk" and a little fanfare
+  score: () => { note(620, 0, 0.14, 'sine', 0.13, 310); note(988, 0.12, 0.12, 'triangle', 0.06); note(1319, 0.2, 0.2, 'triangle', 0.06); },
+  // the extra layer on top of `hit` telling what it was
+  hitBy: (kind) => {
+    if (kind === 'fire') whoosh(0, 0.5, 'highpass', 2500, 6000, 0.08, 0.7);
+    else if (kind === 'ice') whoosh(0, 0.25, 'lowpass', 1800, 250, 0.16, 0.8);
+    else note(1400, 0.02, 0.1, 'triangle', 0.04, 2000);
+  },
+  // hitting a wall: a soft thud and rattling bits, never a harsh bang
+  crash: (s) => {
+    note(170, 0, 0.22, 'sine', 0.12 + 0.12 * s, 70);
+    whoosh(0, 0.25, 'lowpass', 900, 160, 0.12 + 0.12 * s, 0.9);
+    for (let i = 0; i < 3; i++) note(700 + i * 230, 0.05 + i * 0.05, 0.07, 'triangle', 0.03 * s, 500);
+  },
+  // two karts rubbing wheels: a rubbery "boing"
+  bump: () => { note(240, 0, 0.16, 'sine', 0.1, 360); whoosh(0, 0.12, 'bandpass', 700, 300, 0.06, 1.2); },
   // little squeak of a hedgehog climbing aboard
   hog: () => { note(784, 0, 0.09, 'triangle', 0.06, 1175); note(1175, 0.07, 0.12, 'triangle', 0.05, 1568); },
   beep: () => { note(587, 0, 0.3, 'sine', 0.16); note(1174, 0, 0.2, 'sine', 0.035); },

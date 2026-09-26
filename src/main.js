@@ -42,7 +42,7 @@ function resetKart(k, slot) {
     x: P[i].x + S[i].x * lat, z: P[i].z + S[i].z * lat, y: 0, hopV: 0,
     h: headingAt(i), speed: 0, vx: 0, vz: 0, st: 0,
     drifting: false, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
-    item: null, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
+    item: null, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, shake: 0, crashCd: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
   });
   // a touch slower than the player at the top speed, each with its own comfortable gap
   k.ai.skill = CC[cls()].ai * rnd(0.93, 0.97);
@@ -69,6 +69,10 @@ function syncKart(k, dt) {
   v.root.rotation.y = k.h - (k.drifting ? k.driftDir * 0.28 : 0);
   const sf = clamp(Math.abs(k.speed) / 30, 0, 1);
   v.body.rotation.z += ((k.drifting ? k.driftDir : k.st) * 0.07 * sf - v.body.rotation.z) * Math.min(1, dt * 8);
+  // rattle after a crash or a hit
+  const sh = k.shake * k.shake;
+  v.body.position.set(Math.sin(gTime * 57) * 0.14 * sh, Math.abs(Math.sin(gTime * 41)) * 0.1 * sh, 0);
+  v.body.rotation.x = Math.sin(gTime * 47) * 0.09 * sh;
   v.head.rotation.z = k.st * 0.18;
   v.head.rotation.y = -k.st * 0.25;
   // blinking while protected after a hit
@@ -195,6 +199,8 @@ function stepKart(k, inp, dt) {
   if (Math.abs(lat) > LIM) {
     const c = Math.sign(lat) * LIM;
     k.x += sd.x * (c - lat); k.z += sd.z * (c - lat); lat = c;
+    const impact = Math.abs(k.vx * sd.x + k.vz * sd.z);
+    if (impact > 6 && k.crashCd <= 0) crash(k, clamp(impact / 25, 0.3, 1), k.x + sd.x * Math.sign(c) * 1.2, k.z + sd.z * Math.sign(c) * 1.2);
     k.speed *= 0.55; k.vx *= 0.4; k.vz *= 0.4;
   }
   k.lat = lat;
@@ -250,13 +256,22 @@ function rescueKid(k, dt) {
   burst(k.x, 1.2, k.z, 24, 1, 1, 1);
 }
 
-function hitKart(k, by) {
+// a kart that slams into the tyre wall: sparks, a thud and a good shake
+function crash(k, s, x, z) {
+  k.crashCd = 0.5; k.shake = Math.max(k.shake, 0.5 + 0.5 * s);
+  burst(x, 0.7, z, Math.round(8 + 14 * s), 1, 0.75, 0.35);
+  for (let n = 0; n < 8; n++) emit(x, 0.4, z, rnd(-3, 3), rnd(1, 3), rnd(-3, 3), 0.45, 0.4, 0.33, 0.7, 3);
+  if (k.isPlayer) sfx.crash(s);
+}
+
+// kind: 'hog', 'fire' or 'ice'
+function hitKart(k, by, kind) {
   if (k.spin > 0 || k.safe > 0) return;
-  k.spin = 1.1; k.spinDir = Math.random() < 0.5 ? -1 : 1; k.drifting = false; k.boost = 0;
+  k.spin = 1.1; k.spinDir = Math.random() < 0.5 ? -1 : 1; k.drifting = false; k.boost = 0; k.shake = 1;
   if (k.isPlayer) k.safe = k.spin + SAFE_AFTER_HIT;
   burst(k.x, 1.2, k.z, 26, 1, 0.85, 0.2);
-  if (k.isPlayer) { showMsg('Au!'); sfx.hit(); }
-  else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.hit(); }
+  if (k.isPlayer) { showMsg('Au!'); sfx.hit(); sfx.hitBy(kind); }
+  else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); }
 }
 
 function targetAhead(k) {
@@ -282,14 +297,14 @@ function useItem(k) {
     m.scale.setScalar(1.5);
     m.userData.splat.visible = false;
     projectiles.push({ kind: 'ice', idx: (k.idx + 2) % N, f: 0, lat: k.lat, speed: Math.max(46, k.speed + 20), owner: k, life: ICE_FLIGHT, age: 0, target: null, mesh: m });
-    if (k.isPlayer) sfx.throw();
+    if (k.isPlayer) sfx.throwIce();
   }
 }
 function throwHog(k) {
   if (k.hogs <= 0 || k.hogCd > 0 || k.spin > 0) return;
   k.hogs--; k.hogCd = 0.3;
   projectiles.push({ kind: 'hog', idx: (k.idx + 2) % N, f: 0, lat: k.lat, speed: Math.max(58, k.speed + 24), owner: k, life: 5, age: 0, target: targetAhead(k), mesh: makeHog() });
-  if (k.isPlayer) sfx.throw();
+  if (k.isPlayer) sfx.throwHog();
 }
 function rollItem(k) {
   const rank = karts.filter((o) => o.prog > k.prog).length + 1;
@@ -570,6 +585,8 @@ function simulate(dt) {
     } else inp = aiInput(k, dt);
     if (k.hogCd > 0) k.hogCd -= dt;
     if (k.safe > 0) k.safe -= dt;
+    if (k.crashCd > 0) k.crashCd -= dt;
+    if (k.shake > 0) k.shake = Math.max(0, k.shake - dt * 2.5);
     const lapBefore = k.lap;
     stepKart(k, inp, dt);
     if (k.isPlayer && k.lap > lapBefore && k.lap < LAPS && k.lap > 0) showMsg(k.lap === LAPS - 1 ? 'Poslední kolo!' : `Kolo ${k.lap + 1}`);
@@ -594,6 +611,11 @@ function simulate(dt) {
       A.x -= nx * push; A.z -= nz * push; B.x += nx * push; B.z += nz * push;
       const rv = (B.vx - A.vx) * nx + (B.vz - A.vz) * nz;
       if (rv < 0) { A.vx += rv * nx * 0.5; A.vz += rv * nz * 0.5; B.vx -= rv * nx * 0.5; B.vz -= rv * nz * 0.5; }
+      if (rv < -4 && (A.isPlayer || B.isPlayer) && A.crashCd <= 0 && B.crashCd <= 0) {
+        A.shake = B.shake = clamp(-rv / 20, 0.25, 0.6); A.crashCd = B.crashCd = 0.4;
+        burst((A.x + B.x) / 2, 0.8, (A.z + B.z) / 2, 8, 1, 0.9, 0.5);
+        sfx.bump();
+      }
     }
   }
 
@@ -643,6 +665,7 @@ function simulate(dt) {
         pr.mesh.position.y = 0;
         pr.mesh.userData.splat.visible = true;
         burst(x, 0.5, z, 18, 0.97, 0.6, 0.7);
+        if (pr.owner.isPlayer) sfx.splat();
         // the thrower drives past their own ice cream
         hazards.push({ x, z, life: 30, m: pr.mesh, owner: pr.owner, ownerSafe: 3 });
         projectiles.splice(n, 1);
@@ -670,7 +693,7 @@ function simulate(dt) {
     let hit = false;
     for (const k of karts) {
       if ((k === pr.owner && pr.age < 1) || k.y > 1.2) continue;
-      if ((k.x - x) ** 2 + (k.z - z) ** 2 < (fire ? 2.1 : 1.9) ** 2) { hitKart(k, pr.owner); hit = true; break; }
+      if ((k.x - x) ** 2 + (k.z - z) ** 2 < (fire ? 2.1 : 1.9) ** 2) { hitKart(k, pr.owner, pr.kind); hit = true; break; }
     }
     if (hit || pr.life <= 0) {
       if (fire) { burst(x, 1, z, 22, 1, 0.45, 0.08); burst(x, 1, z, 10, 1, 0.85, 0.4); }
@@ -686,7 +709,7 @@ function simulate(dt) {
     let hit = false;
     for (const k of karts) {
       if (k.y > 0.4 || (k === h.owner && h.ownerSafe > 0)) continue;
-      if ((k.x - h.x) ** 2 + (k.z - h.z) ** 2 < 2.1 * 2.1) { hitKart(k, null); hit = true; break; }
+      if ((k.x - h.x) ** 2 + (k.z - h.z) ** 2 < 2.1 * 2.1) { hitKart(k, h.owner, 'ice'); hit = true; break; }
     }
     if (hit || h.life <= 0) { scene.remove(h.m); hazards.splice(n, 1); }
   }
@@ -715,6 +738,8 @@ function updateCamera(dt) {
   const back = k.ch.camBack || 8.8, up = k.ch.camUp || 3.7;
   camTarget.set(k.x - Math.sin(camH) * back, k.y + up, k.z - Math.cos(camH) * back);
   camera.position.lerp(camTarget, 1 - Math.exp(-(state === 'countdown' ? 3 : 10) * dt));
+  const sh = k.shake * k.shake * 0.3;
+  camera.position.x += Math.sin(gTime * 61) * sh; camera.position.y += Math.sin(gTime * 53) * sh * 0.6;
   camLook.set(k.x + Math.sin(camH) * 5, k.y + 1.5, k.z + Math.cos(camH) * 5);
   camera.lookAt(camLook);
   const fov = 64 + clamp(Math.abs(k.speed) / 40, 0, 1.4) * 8 + (k.boost > 0 ? 7 : 0);
