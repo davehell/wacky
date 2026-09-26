@@ -24,15 +24,21 @@ const qTex = canvasTex(128, 128, (g, w, h) => {
 const boxMat = new THREE.MeshStandardMaterial({ map: qTex, emissive: 0xffffff, emissiveMap: qTex, emissiveIntensity: 0.35, transparent: true, opacity: 0.92, roughness: 0.3 });
 const boxGeo = new THREE.BoxGeometry(1.7, 1.7, 1.7);
 const boxes = [];
-for (const f of [0.17, 0.46, 0.73]) {
-  const i = Math.floor(N * f);
-  for (const lat of [-6.5, -2.2, 2.2, 6.5]) {
-    const m = mesh(boxGeo, boxMat);
-    m.position.set(P[i].x + S[i].x * lat, 1.3, P[i].z + S[i].z * lat);
-    m.rotation.set(rnd(0, 3), rnd(0, 3), 0);
-    scene.add(m);
-    boxes.push({ m, respawn: 0 });
-  }
+for (let n = 0; n < 12; n++) {
+  const m = mesh(boxGeo, boxMat);
+  m.rotation.set(rnd(0, 3), rnd(0, 3), 0);
+  scene.add(m);
+  boxes.push({ m, respawn: 0 });
+}
+// Three rows of four boxes across the road of the current circuit
+const BOX_ROWS = [0.17, 0.46, 0.73];
+function placeBoxes() {
+  BOX_ROWS.forEach((f, r) => {
+    const i = Math.floor(N * f);
+    [-6.5, -2.2, 2.2, 6.5].forEach((lat, c) => {
+      boxes[r * 4 + c].m.position.set(P[i].x + S[i].x * lat, 1.3, P[i].z + S[i].z * lat);
+    });
+  });
 }
 
 // Shared by every thrown hedgehog, since there are a lot of them now
@@ -194,4 +200,4 @@ function makeIceCream() {
   return g;
 }
 
-export { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, animateFireball, makeIceCream };
+export { ICONS, ITEM_NAMES, boxes, BOX_ROWS, placeBoxes, makeHog, makeFireball, animateFireball, makeIceCream };

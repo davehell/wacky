@@ -148,6 +148,15 @@ h2 { margin: 4px 0 -6px; font-size: 12px; font-weight: 800; letter-spacing: 0.12
 .char b { font-size: 13px; line-height: 1.15; text-align: center; }
 .face { width: 78px; height: 78px; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 50% 45%, #ffffff 0 30%, var(--kart) 75%); box-shadow: 0 3px 0 rgba(20, 33, 61, 0.25); }
 .face img { width: 100%; height: 100%; display: block; }
+.tracks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.track {
+  font: inherit; color: inherit; cursor: pointer; border: 2px solid transparent; background: rgba(255, 255, 255, 0.55);
+  border-radius: 16px; padding: 8px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.track:hover { background: #fff; }
+.track[aria-checked="true"] { background: #fff; border-color: var(--ink); box-shadow: 0 3px 0 var(--ink); }
+.track canvas { width: 100%; aspect-ratio: 3 / 2; border-radius: 10px; display: block; }
+.track b { font-size: 13px; line-height: 1.15; text-align: center; }
 .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: var(--line); padding: 5px; border-radius: 14px; }
 .seg--2 { grid-template-columns: repeat(2, 1fr); }
 .hint { margin: -4px 0 0; font-size: 13px; color: var(--ink-soft); }

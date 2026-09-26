@@ -409,23 +409,28 @@ const nextAct = (sp) => (sp.act + 1 + Math.floor(Math.random() * (ACTS.length - 
 /* ---------- Placement ---------- */
 const spots = [];
 {
-  const COUNT = 11, avoid = [0.17, 0.46, 0.73].map((f) => Math.floor(N * f));
+  const COUNT = 11;
   const order = ACTS.map((_, n) => n).sort(() => Math.random() - 0.5);
   for (let n = 0; n < COUNT; n++) {
-    let i = Math.floor(60 + (n * (N - 140)) / COUNT);
-    if (avoid.some((a) => Math.abs(a - i) < 14)) i += 16;
-    // spread across the road, but well away from its edges
-    const lat = ((n * 5) % 9 - 4) * (W * 0.55) / 4;
     const c = makeHedgehog();
-    const x = P[i].x + S[i].x * lat, z = P[i].z + S[i].z * lat;
-    c.root.position.set(x, 0, z);
-    c.root.rotation.y = headingAt(i) + Math.PI;
     c.root.scale.setScalar(SIZE);
     scene.add(c.root);
-    const sp = { c, x, z, act: 0, anim: null, bag: [], t: rnd(0, 10), here: true, respawn: 0, switchT: rnd(15, 30), grow: 1 };
+    const sp = { c, x: 0, z: 0, act: 0, anim: null, bag: [], t: rnd(0, 10), here: true, respawn: 0, switchT: rnd(15, 30), grow: 1 };
     setAct(sp, order[n % order.length]);
     spots.push(sp);
   }
+}
+// Spreads the hedgehogs along the current circuit, clear of `avoid` (road indices such as the item boxes)
+function placeHedgehogs(avoid) {
+  spots.forEach((sp, n) => {
+    let i = Math.floor(60 + (n * (N - 140)) / spots.length);
+    for (let g = 0; g < 8 && avoid.some((a) => Math.abs(a - i) < 14); g++) i += 16;
+    // spread across the road, but well away from its edges
+    const lat = ((n * 5) % 9 - 4) * (W * 0.55) / 4;
+    sp.x = P[i].x + S[i].x * lat; sp.z = P[i].z + S[i].z * lat;
+    sp.c.root.position.set(sp.x, 0, sp.z);
+    sp.c.root.rotation.y = headingAt(i) + Math.PI;
+  });
 }
 
 function updateHedgehogs(dt, cam) {
@@ -479,4 +484,4 @@ function hedgehogPicture() {
   }, 160)[0];
 }
 
-export { MAX_HOGS, spots as hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture };
+export { MAX_HOGS, spots as hedgehogSpots, placeHedgehogs, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture };

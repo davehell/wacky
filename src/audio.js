@@ -1,5 +1,4 @@
 import { $, clamp, store } from './util.js';
-import { W } from './track.js';
 
 /* ================= Audio ================= */
 let AC = null, master = null, sfxBus = null, noiseBuf = null, pulse = null, eng = null, muted = store.get('dk-muted') === '1';
@@ -134,7 +133,7 @@ function revOf(v, g) { const lo = GEARS[g - 1], hi = GEARS[g]; return clamp(0.25
 // rev: optional override (0..1) used while waiting on the grid
 function setEngine(k, throttle, dt, rev = null) {
   if (!eng) return;
-  const t = AC.currentTime, v = Math.abs(k.speed), off = Math.abs(k.lat) > W + 1.2;
+  const t = AC.currentTime, v = Math.abs(k.speed), rumble = k.surf ? k.surf.rumble : 0, off = rumble > 0;
   // the gearbox hears a speed that climbs slowly, so the pull through the gears lasts several seconds
   const top = GEARS[GEARS.length - 3];
   // a sharp bend "lifts off" a little, dropping a gear on the way in and picking it up on the way out
@@ -173,7 +172,7 @@ function setEngine(k, throttle, dt, rev = null) {
   eng.gain.gain.setTargetAtTime(vol * PLAYER_ENGINE_VOL, t, 0.05);
   eng.skid.g.gain.setTargetAtTime(k.drifting ? 0.04 : 0, t, 0.05);
   eng.skid.f.frequency.setTargetAtTime(1300 + v * 12 + Math.sin(t * 9) * 150, t, 0.05);
-  eng.rumble.g.gain.setTargetAtTime(off ? clamp(v / 20, 0, 1) * 0.12 : 0, t, 0.08);
+  eng.rumble.g.gain.setTargetAtTime(clamp(v / 20, 0, 1) * 0.12 * rumble, t, 0.08);
 }
 // heading: camera yaw, used to pan opponents left or right
 function updateOpponents(listener, others, heading) {

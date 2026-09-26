@@ -21,7 +21,8 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
 
 - šest jezdců — žralok, žirafa, jelen, žabák, zajíček a slonice, každý s jinou rychlostí,
   zrychlením a ovládáním
-- Slunečný okruh na tři kola proti pěti soupeřům
+- tři tratě na tři kola proti pěti soupeřům: Slunečný okruh, Zasněžené údolí s kluzkým ledem
+  a sněžením a Pouštní kaňon s písečnými závějemi, které brzdí
 - drift s turbem (modré a oranžové jiskry), raketový start
 - ježci na trati jako v původní hře: přejetím je sebereš (až 10) a pak je házíš — kutálí se za soupeřem
   před tebou; každý ježek zrovna něco dělá (sedí na záchodě, čte noviny, spí, hraje na kytaru…)

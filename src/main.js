@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { $, clamp, rnd, wrapA, store, hex } from './util.js';
 import { stage, renderer, scene, camera, sky, sun } from './render.js';
-import { N, W, LIM, LAPS, P, T, S, SEG, headingAt, nearest, clouds } from './track.js';
+import { N, W, LIM, LAPS, P, T, S, SEG, TRACKS, headingAt, nearest, surfaceAt, loadTrack, currentTrack, updateScenery } from './track.js';
 import { CHARS, makeKart, makePortraits } from './characters.js';
-import { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, animateFireball, makeIceCream } from './items.js';
-import { MAX_HOGS, hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
+import { ICONS, ITEM_NAMES, boxes, BOX_ROWS, placeBoxes, makeHog, makeFireball, animateFireball, makeIceCream } from './items.js';
+import { MAX_HOGS, hedgehogSpots, placeHedgehogs, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
 import { parts, emit, updateParticles, burst } from './particles.js';
 import { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
@@ -21,7 +21,7 @@ const CC = [
   // kids' mode: automatic throttle, gentle steering; opponents keep close so there is still a race to win
   { base: 28, ai: 0.98, label: 'Dětský režim', in: 'v dětském režimu' },
 ];
-let ccIdx = 1, selected = 0, kid = store.get('dk-kid') === '1';
+let ccIdx = 1, selected = 0, trackIdx = 0, kid = store.get('dk-kid') === '1';
 const cls = () => (kid ? 3 : ccIdx);
 let state = 'menu', paused = false, raceTime = 0, cdT = 0, cdShown = null, finishCount = 0, doneT = 0, gTime = 0;
 let player = null, launchAt = null, aiShotT = 0;
@@ -158,9 +158,9 @@ function stepKart(k, inp, dt) {
   // kids get a slow, smooth wheel so a tap on a key never jerks the kart
   k.st += (inp.steer - k.st) * Math.min(1, dt * (k.kid ? 1.8 : 10));
   k.thr = inp.throttle;
-  const off = Math.abs(k.lat) > W + 1.2;
-  let maxS = base * k.mul;
-  if (off) maxS *= 0.48;
+  const surf = surfaceAt(k.idx, k.lat), off = surf.rumble > 0;
+  k.surf = surf;
+  let maxS = base * k.mul * surf.speed;
   if (k.boost > 0) { k.boost -= dt; maxS = Math.max(maxS, base * 1.38); k.speed += 55 * dt; }
   else if (inp.throttle && k.speed < maxS) k.speed += 25 * dt * (1 - 0.55 * Math.max(0, k.speed) / maxS);
   if (inp.brake) { k.speed -= (k.speed > 0 ? 45 : 14) * dt; if (k.speed < -11) k.speed = -11; }
@@ -187,7 +187,9 @@ function stepKart(k, inp, dt) {
   k.h -= yaw * sf * dt;
 
   const fx = Math.sin(k.h), fz = Math.cos(k.h);
-  const grip = k.spin > 0 ? 1.2 : k.drifting ? 2.6 : off ? 5 : 10;
+  // kids slide on ice only a little
+  const sg = k.kid ? Math.max(0.6, surf.grip) : surf.grip;
+  const grip = k.spin > 0 ? 1.2 : k.drifting ? 2.6 * Math.min(1, sg / 0.5) : 10 * sg;
   const g = 1 - Math.exp(-grip * dt);
   k.vx += (fx * k.speed - k.vx) * g;
   k.vz += (fz * k.speed - k.vz) * g;
@@ -223,7 +225,8 @@ function stepKart(k, inp, dt) {
     for (const sgn of [-1, 1]) emit(rx + fz * sgn * 1.05, 0.3, rz - fx * sgn * 1.05, rnd(-2, 2), rnd(1, 4), rnd(-2, 2), c[0], c[1], c[2], 0.35, 12);
   }
   if (k.boost > 0) emit(k.x - fx * 1.9, 0.75 + k.y, k.z - fz * 1.9, -fx * 8 + rnd(-1, 1), rnd(0, 2), -fz * 8 + rnd(-1, 1), 1, rnd(0.35, 0.6), 0.1, 0.25);
-  if (off && Math.abs(k.speed) > 8 && Math.random() < 0.6) emit(rx, 0.4, rz, rnd(-1.5, 1.5), rnd(1, 3), rnd(-1.5, 1.5), 0.32, 0.27, 0.16, 0.6, 2);
+  const dust = surf.dust;
+  if (dust && Math.abs(k.speed) > 8 && Math.random() < 0.6) emit(rx, 0.4, rz, rnd(-1.5, 1.5), rnd(1, 3), rnd(-1.5, 1.5), dust[0], dust[1], dust[2], 0.6, 2);
 }
 
 // Rubber band: a player who drives well pulls ahead but only by a short lead, and after a stop the field
@@ -450,6 +453,12 @@ function setupMini() {
   const path = () => { g.beginPath(); P.forEach((p, i) => { const [x, y] = mapPt(p.x, p.z); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); };
   path(); g.strokeStyle = '#14213d'; g.lineWidth = 9 * dpr; g.stroke();
   path(); g.strokeStyle = '#ffffff'; g.lineWidth = 5 * dpr; g.stroke();
+  // ice and sand patches
+  for (const zn of currentTrack().zones) {
+    g.beginPath();
+    for (let i = zn.a, first = true; ; i = (i + 1) % N, first = false) { const [x, y] = mapPt(P[i].x, P[i].z); first ? g.moveTo(x, y) : g.lineTo(x, y); if (i === zn.b) break; }
+    g.strokeStyle = zn.s === 'ice' ? '#7cc8f2' : '#e0a95c'; g.lineWidth = 5 * dpr; g.stroke();
+  }
   const [sx, sy] = mapPt(P[0].x, P[0].z);
   g.fillStyle = '#ef476f'; g.fillRect(sx - 3 * dpr, sy - 6 * dpr, 6 * dpr, 12 * dpr);
 }
@@ -489,6 +498,40 @@ function selectChar(i) {
   charsEl.querySelectorAll('.char').forEach((b, j) => b.setAttribute('aria-checked', String(j === i)));
   placeGrid();
 }
+const tracksEl = $('#tracks');
+TRACKS.forEach((tr, i) => {
+  const b = document.createElement('button');
+  b.className = 'track'; b.setAttribute('role', 'radio');
+  b.innerHTML = `<canvas width="150" height="100"></canvas><b>${tr.name}</b>`;
+  drawTrackPreview(b.querySelector('canvas'), tr);
+  b.addEventListener('click', () => selectTrack(i));
+  tracksEl.appendChild(b);
+});
+// the outline of a circuit in its own colours, seen the same way round as on the minimap
+function drawTrackPreview(cv, tr) {
+  const g = cv.getContext('2d'), w = cv.width, h = cv.height;
+  const pts = new THREE.CatmullRomCurve3(tr.ctrl.map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'centripetal').getSpacedPoints(160);
+  const xs = pts.map((p) => p.x), zs = pts.map((p) => p.z);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
+  const s = Math.min((w - 24) / (maxX - minX), (h - 24) / (maxZ - minZ));
+  const ox = (w - (maxX - minX) * s) / 2, oy = (h - (maxZ - minZ) * s) / 2;
+  const grd = g.createLinearGradient(0, 0, 0, h);
+  grd.addColorStop(0, tr.theme.swatch[1]); grd.addColorStop(1, tr.theme.swatch[0]);
+  g.fillStyle = grd; g.fillRect(0, 0, w, h);
+  g.lineJoin = 'round';
+  const path = () => { g.beginPath(); pts.forEach((p, i) => { const x = (maxX - p.x) * s + ox, y = (maxZ - p.z) * s + oy; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); };
+  path(); g.strokeStyle = '#14213d'; g.lineWidth = 9; g.stroke();
+  path(); g.strokeStyle = '#ffffff'; g.lineWidth = 5; g.stroke();
+}
+function selectTrack(i) {
+  trackIdx = i;
+  store.set('dk-track', String(i));
+  loadTrack(i);
+  placeBoxes();
+  placeHedgehogs(BOX_ROWS.map((f) => Math.floor(N * f)));
+  tracksEl.querySelectorAll('.track').forEach((b, j) => b.setAttribute('aria-checked', String(j === i)));
+  placeGrid(); setupMini(); showBest();
+}
 document.querySelectorAll('#cc button').forEach((b) => b.addEventListener('click', () => {
   ccIdx = Number(b.dataset.cc);
   store.set('dk-cc', String(ccIdx));
@@ -504,9 +547,11 @@ function setKid(on) {
   show('#ccBlock', !kid);
   placeGrid(); showBest();
 }
+// the first circuit keeps the key it had before there were more of them
+const bestKey = () => 'dk-best-' + (trackIdx ? currentTrack().id + '-' : '') + cls();
 function showBest() {
-  const c = CC[cls()], b = store.get('dk-best-' + cls());
-  const t = b ? `Tvůj nejlepší čas ${c.in}: ${fmt(Number(b))}` : `${c.in} zatím nemáš zajetý čas.`;
+  const c = CC[cls()], b = store.get(bestKey()), tr = currentTrack();
+  const t = b ? `Tvůj nejlepší čas ${tr.in} ${c.in}: ${fmt(Number(b))}` : `${tr.in} ${c.in} zatím nemáš zajetý čas.`;
   $('#best').textContent = t.charAt(0).toUpperCase() + t.slice(1);
 }
 
@@ -561,10 +606,11 @@ function showResults() {
   const place = rows.findIndex((r) => r.k.isPlayer) + 1;
   $('#resTitle').textContent = `${place}. místo`;
   const c = CC[cls()];
-  $('#resEyebrow').textContent = place === 1 ? 'Vítězství · Slunečný okruh' : `Cíl · ${c.label}`;
-  const key = 'dk-best-' + cls(), prev = Number(store.get(key));
-  if (!prev || player.finishTime < prev) { store.set(key, String(player.finishTime)); $('#resBest').textContent = `Nový osobní rekord ${c.in}!`; }
-  else $('#resBest').textContent = `Osobní rekord ${c.in}: ${fmt(prev)}`;
+  const tr = currentTrack();
+  $('#resEyebrow').textContent = place === 1 ? `Vítězství · ${tr.name}` : `Cíl · ${tr.name} · ${c.label}`;
+  const key = bestKey(), prev = Number(store.get(key));
+  if (!prev || player.finishTime < prev) { store.set(key, String(player.finishTime)); $('#resBest').textContent = `Nový osobní rekord ${tr.in} ${c.in}!`; }
+  else $('#resBest').textContent = `Osobní rekord ${tr.in} ${c.in}: ${fmt(prev)}`;
   show('#results', true);
   $('#againBtn').focus();
 }
@@ -778,7 +824,7 @@ function updateCamera(dt) {
 function frameUpdate(dt) {
   gTime += dt;
   for (const b of boxes) { b.m.rotation.y += dt * 1.2; b.m.rotation.x += dt * 0.6; b.m.position.y = 1.3 + Math.sin(gTime * 2 + b.m.position.x) * 0.2; }
-  for (const c of clouds) { c.position.x += dt * 3; if (c.position.x > 900) c.position.x = -700; }
+  updateScenery(dt, camera.position);
   if (!paused) {
     const steps = dt > 1 / 50 ? 2 : 1;
     for (let s = 0; s < steps; s++) simulate(dt / steps);
@@ -806,6 +852,7 @@ function loop(now) {
 // boot
 ccIdx = clamp(Number(store.get('dk-cc') ?? 1) || 0, 0, 2);
 document.querySelectorAll('#cc button').forEach((x) => x.setAttribute('aria-checked', String(Number(x.dataset.cc) === ccIdx)));
+selectTrack(clamp(Number(store.get('dk-track')) || 0, 0, TRACKS.length - 1));
 selectChar(clamp(Number(store.get('dk-char')) || 0, 0, CHARS.length - 1));
 setKid(kid);
 addEventListener('resize', resize);
