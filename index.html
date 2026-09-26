@@ -13,11 +13,11 @@
 <div id="stage"></div>
 
 <div class="hud" id="hud" hidden>
-  <div class="hud__tl">
-    <div class="pos outline"><span id="pos">6.</span><small id="posOf">/6</small></div>
-    <div class="chip"><div><span>Kolo</span><b id="lap">1/3</b></div><div><span>Čas</span><b id="time">0:00.00</b></div></div>
-  </div>
-  <div class="hud__tr">
+  <div class="hud__top">
+    <div class="hud__race">
+      <div class="pos outline"><span id="pos">6.</span><small id="posOf">/6</small></div>
+      <div class="chip"><div><span>Kolo</span><b id="lap">1/3</b></div><div><span>Čas</span><b id="time">0:00.00</b></div></div>
+    </div>
     <div>
       <div class="ammo" id="ammo"><span id="hogIcon"></span><b id="hogs">0</b></div>
       <div class="slot-label">Ježci</div>
@@ -26,6 +26,8 @@
       <div class="slot" id="slot"></div>
       <div class="slot-label" id="slotLabel">Prázdné</div>
     </div>
+  </div>
+  <div class="hud__tr">
     <div class="icon-btns">
       <button class="icon-btn" id="pauseBtn" aria-label="Pauza"><svg viewBox="0 0 20 20"><rect x="4" y="3" width="4" height="14" rx="1.5" fill="currentColor"/><rect x="12" y="3" width="4" height="14" rx="1.5" fill="currentColor"/></svg></button>
       <button class="icon-btn" id="muteBtn" aria-label="Zvuk"><svg viewBox="0 0 20 20" id="muteIcon"></svg></button>
