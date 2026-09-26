@@ -6,7 +6,7 @@ import { CHARS, makeKart, makePortraits } from './characters.js';
 import { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, animateFireball, makeIceCream } from './items.js';
 import { MAX_HOGS, hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
 import { parts, emit, updateParticles, burst } from './particles.js';
-import { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute, ENGINES, setEngineSound, previewEngine } from './audio.js';
+import { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
 /* ================= Game state ================= */
 // Opponents carry only a few hedgehogs and take turns at the player, so a leader is never pelted non-stop
@@ -496,16 +496,6 @@ document.querySelectorAll('#cc button').forEach((b) => b.addEventListener('click
   showBest();
 }));
 document.querySelectorAll('#mode button').forEach((b) => b.addEventListener('click', () => setKid(b.dataset.kid === '1')));
-// temporary engine sound picker; clicking a variant also plays a short rev of it
-const engineSel = $('#engineSel');
-const markEngine = (id) => engineSel.querySelectorAll('button').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.engine === id)));
-for (const [id, e] of Object.entries(ENGINES)) {
-  const b = document.createElement('button');
-  b.setAttribute('role', 'radio'); b.dataset.engine = id; b.textContent = e.name;
-  b.addEventListener('click', () => { setEngineSound(id); markEngine(id); previewEngine(); });
-  engineSel.appendChild(b);
-}
-markEngine(store.get('dk-engine') in ENGINES ? store.get('dk-engine') : 'cartoon');
 function setKid(on) {
   kid = on;
   store.set('dk-kid', kid ? '1' : '0');

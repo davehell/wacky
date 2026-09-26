@@ -32,23 +32,19 @@ function initAudio() {
     noiseBuf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    // Every engine voice has the same graph; the chosen profile only retunes it.
-    // An LFO pumping the volume makes the "pr-pr-pr" putter, a slow wobble on the pitch makes it rubbery.
-    const voice = () => {
-      const osc = AC.createOscillator();
-      const hp = AC.createBiquadFilter(); hp.type = 'highpass';
-      const lp = AC.createBiquadFilter(); lp.type = 'lowpass';
-      const putt = AC.createGain();
-      const lfo = AC.createOscillator(); lfo.frequency.value = 8;
-      const depth = AC.createGain();
-      lfo.connect(depth).connect(putt.gain);
+    // An almost pure, soft hum, like an electric toy car; a slight wobble keeps it from sounding static
+    const hum = AC.createPeriodicWave(new Float32Array(4), new Float32Array([0, 1, 0.12, 0.04]));
+    const voice = (lpFreq) => {
+      const osc = AC.createOscillator(); osc.setPeriodicWave(hum);
+      const hp = AC.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 60;
+      const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = lpFreq; lp.Q.value = 0.5;
       const wob = AC.createOscillator(); wob.frequency.value = 4.5 + Math.random();
-      const wobDepth = AC.createGain();
+      const wobDepth = AC.createGain(); wobDepth.gain.value = 6;
       wob.connect(wobDepth).connect(osc.detune);
       const gain = AC.createGain(); gain.gain.value = 0;
-      osc.connect(hp).connect(lp).connect(putt).connect(gain);
-      osc.start(); lfo.start(); wob.start();
-      return { osc, hp, lp, putt, lfo, depth, wobDepth, gain };
+      osc.connect(hp).connect(lp).connect(gain);
+      osc.start(); wob.start();
+      return { osc, lp, gain };
     };
     const loopNoise = (type, f, q) => {
       const s = AC.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
@@ -57,17 +53,19 @@ function initAudio() {
       s.connect(fl).connect(g).connect(master); s.start();
       return { f: fl, g };
     };
-    const v = voice();
+    const v = voice(800);
     v.gain.connect(master);
-    eng = Object.assign(v, { w: 0, gear: 1, shiftT: 0, skid: loopNoise('bandpass', 1500, 3), rumble: loopNoise('lowpass', 420, 0.7), vs: 0, blipT: 0, load: 0 });
+    eng = Object.assign(v, {
+      w: 0, gear: 1, shiftT: 0, vs: 0, blipT: 0, load: 0,
+      skid: loopNoise('bandpass', 1500, 3), rumble: loopNoise('lowpass', 420, 0.7), jet: loopNoise('bandpass', 1500, 1.4),
+    });
 
     for (let i = 0; i < 5; i++) {
-      const o = voice();
+      const o = voice(900);
       const pan = AC.createStereoPanner ? AC.createStereoPanner() : null;
       if (pan) o.gain.connect(pan).connect(master); else o.gain.connect(master);
       opp.push(Object.assign(o, { pan, pitch: 0.85 + i * 0.09 }));
     }
-    tuneEngines();
   } catch (e) { AC = null; eng = null; }
 }
 function note(freq, at, dur, type = 'sine', vol = 0.1, endFreq = 0) {
@@ -138,78 +136,11 @@ const sfx = {
     if (level === 1) { note(1319, 0, 0.18, 'triangle', 0.06); note(1760, 0.07, 0.25, 'triangle', 0.05); }
     else { note(1568, 0, 0.16, 'triangle', 0.07); note(2093, 0.06, 0.16, 'triangle', 0.06); note(2637, 0.12, 0.3, 'triangle', 0.05); }
   },
-  shift: () => { if (prof.shift) prof.shift(); },
 };
 function gearOf(v) { let g = 1; while (g < GEARS.length - 1 && v >= GEARS[g]) g++; return g; }
 function revOf(v, g) { const lo = GEARS[g - 1], hi = GEARS[g]; return clamp(0.25 + 0.75 * ((v - lo) / (hi - lo)), 0.2, 1); }
 
-// Engine sound profiles. harm: harmonic amplitudes of the tone; pitch: [idle Hz, rise per rev];
-// lp: low-pass [base, per rev, extra on throttle]; putt: depth of the putter (0 = smooth);
-// wobble: pitch wobble in cents; dip: pitch drop during an upshift.
-const ENGINES = {
-  // a round, hollow tone that putters and sweeps widely through each gear: a cartoon "vroooom"
-  cartoon: {
-    name: 'Kreslený', harm: [1, 0.35, 0.18, 0.06, 0.03], hp: 90, q: 0.7, lp: [900, 1500, 400], oppLp: 1400,
-    pitch: [95, 230], putt: 0.4, wobble: 20, dip: 0.85, vol: 1,
-    shift: () => note(420, 0, 0.14, 'sine', 0.035, 680),
-  },
-  // an almost pure, quiet hum, like an electric toy car
-  soft: {
-    name: 'Měkký', harm: [1, 0.12, 0.04], hp: 60, q: 0.5, lp: [600, 900, 200], oppLp: 900,
-    pitch: [75, 150], putt: 0, wobble: 6, dip: 0.93, vol: 1, shift: null,
-  },
-  // a bright high scream with many harmonics and sharp upshifts; the doppler of passing karts does the rest
-  f1: {
-    name: 'Formule 1', harm: Array.from({ length: 24 }, (_, i) => (i % 2 ? 0.6 : 1) / (i + 1)), hp: 220, q: 1.1,
-    lp: [1400, 2600, 800], oppLp: 3000, pitch: [190, 520], putt: 0.06, wobble: 4, dip: 0.72, vol: 0.7,
-    shift: () => whoosh(0, 0.07, 'highpass', 3200, 1600, 0.04, 1),
-  },
-  // the original nasal buzz of a small single-cylinder engine (30 % pulse wave)
-  buzz: {
-    name: 'Původní', harm: Array.from({ length: 31 }, (_, i) => (Math.sin((i + 1) * Math.PI * 0.3) / (i + 1)) * Math.exp(-(i + 1) / 14)),
-    hp: 150, q: 0.8, lp: [700, 1800, 700], oppLp: 1400, pitch: [78, 170], putt: 0, wobble: 0, dip: 0.9, vol: 1,
-    shift: () => whoosh(0, 0.09, 'bandpass', 2500, 1200, 0.05, 2),
-  },
-};
-let prof = ENGINES[store.get('dk-engine')] || ENGINES.cartoon;
-const pitchOf = (r) => prof.pitch[0] + r * prof.pitch[1];
-const puttOf = (r) => 7 + r * 13;
-function tuneEngines() {
-  if (!eng) return;
-  const im = new Float32Array([0, ...prof.harm]);
-  const wave = AC.createPeriodicWave(new Float32Array(im.length), im);
-  for (const v of [eng, ...opp]) {
-    v.osc.setPeriodicWave(wave);
-    v.hp.frequency.value = prof.hp;
-    v.lp.Q.value = prof.q;
-    v.putt.gain.value = 1 - prof.putt;
-    v.depth.gain.value = prof.putt;
-    v.wobDepth.gain.value = prof.wobble;
-  }
-  for (const o of opp) o.lp.frequency.value = prof.oppLp;
-}
-function setEngineSound(id) {
-  if (!ENGINES[id]) return;
-  prof = ENGINES[id];
-  store.set('dk-engine', id);
-  tuneEngines();
-}
-// a short rev through two gears so the sound can be heard from the menu
-function previewEngine() {
-  initAudio();
-  if (!eng) return;
-  const t = AC.currentTime, vol = 0.07 * PLAYER_ENGINE_VOL * prof.vol;
-  const f = eng.osc.frequency, lf = eng.lfo.frequency, g = eng.gain.gain, lp = eng.lp.frequency;
-  for (const p of [f, lf, g, lp]) p.cancelScheduledValues(t);
-  f.setValueAtTime(pitchOf(0.25), t); f.linearRampToValueAtTime(pitchOf(1), t + 0.9);
-  f.setValueAtTime(pitchOf(1) * prof.dip, t + 0.9); f.linearRampToValueAtTime(pitchOf(0.35), t + 1.05);
-  f.linearRampToValueAtTime(pitchOf(1), t + 2);
-  lf.setValueAtTime(puttOf(0.25), t); lf.linearRampToValueAtTime(puttOf(1), t + 2);
-  lp.setValueAtTime(prof.lp[0] + prof.lp[2], t); lp.linearRampToValueAtTime(prof.lp[0] + prof.lp[1] + prof.lp[2], t + 2);
-  g.setValueAtTime(0.0001, t); g.linearRampToValueAtTime(vol, t + 0.08);
-  g.setValueAtTime(vol, t + 2); g.linearRampToValueAtTime(0, t + 2.4);
-  if (prof.shift) setTimeout(prof.shift, 900);
-}
+const pitchOf = (r) => 75 + r * 150;
 
 // rev: optional override (0..1) used while waiting on the grid
 function setEngine(k, throttle, dt, rev = null) {
@@ -228,7 +159,7 @@ function setEngine(k, throttle, dt, rev = null) {
     // hold the gear through small dips so it does not hunt up and down
     if (g === eng.gear - 1 && eng.vs > GEARS[g] - top * 0.015) g = eng.gear;
     if (g !== eng.gear) {
-      if (g > eng.gear) { eng.shiftT = 0.16; if (PLAYER_ENGINE_VOL > 0) sfx.shift(); } else eng.blipT = 0.18;
+      if (g > eng.gear) eng.shiftT = 0.16; else eng.blipT = 0.18;
       eng.gear = g;
     }
     r = revOf(eng.vs, g);
@@ -246,12 +177,11 @@ function setEngine(k, throttle, dt, rev = null) {
   eng.w *= 1 - dt * 0.6;
   eng.w = clamp(eng.w, -0.04, 0.04);
   const bump = off && v > 5 ? (Math.random() - 0.5) * 0.1 : 0;
-  const f = pitchOf(r) * (1 + eng.w + bump) * (eng.shiftT > 0 ? prof.dip : 1);
+  const f = pitchOf(r) * (1 + eng.w + bump) * (eng.shiftT > 0 ? 0.93 : 1);
   eng.osc.frequency.setTargetAtTime(f, t, 0.035);
-  eng.lfo.frequency.setTargetAtTime(puttOf(r) + (throttle ? 2 : 0), t, 0.1);
-  eng.lp.frequency.setTargetAtTime(prof.lp[0] + r * prof.lp[1] + (throttle ? prof.lp[2] : 0), t, 0.08);
+  eng.lp.frequency.setTargetAtTime(600 + r * 900 + (throttle ? 200 : 0), t, 0.08);
   const vol = eng.shiftT > 0 ? 0.03 : (throttle ? 0.07 : 0.045) + r * 0.02;
-  eng.gain.gain.setTargetAtTime(vol * PLAYER_ENGINE_VOL * prof.vol, t, 0.05);
+  eng.gain.gain.setTargetAtTime(vol * PLAYER_ENGINE_VOL, t, 0.05);
   eng.skid.g.gain.setTargetAtTime(k.drifting ? 0.04 : 0, t, 0.05);
   eng.skid.f.frequency.setTargetAtTime(1300 + v * 12 + Math.sin(t * 9) * 150, t, 0.05);
   eng.rumble.g.gain.setTargetAtTime(off ? clamp(v / 20, 0, 1) * 0.12 : 0, t, 0.08);
@@ -270,8 +200,7 @@ function updateOpponents(listener, others, heading) {
     const v = Math.abs(k.speed);
     const r = revOf(v, gearOf(v));
     o.osc.frequency.setTargetAtTime(pitchOf(r) * o.pitch * doppler, t, 0.05);
-    o.lfo.frequency.setTargetAtTime(puttOf(r) * o.pitch, t, 0.1);
-    o.gain.gain.setTargetAtTime(0.06 * prof.vol * Math.pow(clamp(1 - d / 50, 0, 1), 2), t, 0.08);
+    o.gain.gain.setTargetAtTime(0.06 * Math.pow(clamp(1 - d / 50, 0, 1), 2), t, 0.08);
     if (o.pan) o.pan.pan.setTargetAtTime(clamp(-(dx * rx + dz * rz) / 12, -0.9, 0.9), t, 0.08);
   });
 }
@@ -293,4 +222,4 @@ function toggleMute() {
 }
 drawMuteIcon();
 
-export { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute, ENGINES, setEngineSound, previewEngine };
+export { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute };
