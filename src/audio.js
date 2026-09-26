@@ -1,5 +1,6 @@
 import { $, clamp, store } from './util.js';
 import { W } from './track.js';
+import { startMusic, duckMusic } from './music.js';
 
 /* ================= Audio ================= */
 let AC = null, master = null, sfxBus = null, noiseBuf = null, round = null, eng = null, muted = store.get('dk-muted') === '1';
@@ -62,6 +63,7 @@ function initAudio() {
       if (pan) o.gain.connect(pan).connect(master); else o.gain.connect(master);
       opp.push(Object.assign(o, { pan, pitch: 0.85 + i * 0.09 }));
     }
+    startMusic(AC, master);
   } catch (e) { AC = null; eng = null; }
 }
 function note(freq, at, dur, type = 'sine', vol = 0.1, endFreq = 0) {
@@ -135,6 +137,9 @@ const sfx = {
   // a gear change is a little springy "boing"
   shift: () => note(420, 0, 0.14, 'sine', 0.035, 680),
 };
+for (const [name, play] of Object.entries(sfx)) {
+  if (name !== 'shift') sfx[name] = (...a) => { duckMusic(); play(...a); };
+}
 function gearOf(v) { let g = 1; while (g < GEARS.length - 1 && v >= GEARS[g]) g++; return g; }
 function revOf(v, g) { const lo = GEARS[g - 1], hi = GEARS[g]; return clamp(0.25 + 0.75 * ((v - lo) / (hi - lo)), 0.2, 1); }
 // a wide pitch sweep per gear reads as a cartoon "vroooom"
