@@ -4,7 +4,7 @@ import { stage, renderer, scene, camera, sky, sun } from './render.js';
 import { N, W, LIM, LAPS, P, T, S, SEG, headingAt, nearest, clouds } from './track.js';
 import { CHARS, makeKart, makePortraits } from './characters.js';
 import { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, makeIceCream } from './items.js';
-import { MAX_HOGS, hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs } from './hedgehogs.js';
+import { MAX_HOGS, hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
 import { parts, emit, updateParticles, burst } from './particles.js';
 import { initAudio, sfx, setEngine, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
@@ -316,7 +316,10 @@ function aiInput(k, dt) {
 const el = { hogs: $('#hogs'), ammo: $('#ammo'), pos: $('#pos'), lap: $('#lap'), time: $('#time'), speed: $('#speed'), slot: $('#slot'), slotLabel: $('#slotLabel'), msg: $('#msg'), cd: $('#cd'), drift: $('#driftBar') };
 const fmt = (t) => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(2).padStart(5, '0')}`; };
 let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1;
-$('#hogIcon').innerHTML = ICONS.hedgehog;
+{
+  const pic = hedgehogPicture();
+  $('#hogIcon').innerHTML = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
+}
 function showMsg(t, dur = 1.3) { el.msg.textContent = t; el.msg.classList.remove('pop'); void el.msg.offsetWidth; el.msg.classList.add('pop'); el.msg.hidden = false; msgTimer = dur; }
 function setText(key, node, v) { if (lastHud[key] !== v) { node.textContent = v; lastHud[key] = v; } }
 const ranked = () => karts.slice().sort((a, b) => (b.finished ? 1e9 - b.finishTime : b.prog) - (a.finished ? 1e9 - a.finishTime : a.prog));

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BufferGeometryUtils } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { rnd, clamp } from './util.js';
-import { scene, canvasTex, std, mesh } from './render.js';
+import { scene, canvasTex, std, mesh, snapshots } from './render.js';
 import { N, W, P, S, headingAt } from './track.js';
 
 /* ================= Roadside hedgehogs ================= */
@@ -469,4 +469,14 @@ function resetHedgehogs() {
   }
 }
 
-export { MAX_HOGS, spots as hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs };
+// The HUD ammo icon is a picture of the very same hedgehog that sits on the road
+function hedgehogPicture() {
+  const c = makeHedgehog();
+  return snapshots([c.root], (obj) => {
+    const box = new THREE.Box3().setFromObject(obj);
+    const center = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+    return { center, radius: Math.max(size.x, size.y) * 0.5, dir: new THREE.Vector3(0.35, 0.18, 1) };
+  }, 160)[0];
+}
+
+export { MAX_HOGS, spots as hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture };
