@@ -39,7 +39,7 @@ function resetKart(k, slot) {
     x: P[i].x + S[i].x * lat, z: P[i].z + S[i].z * lat, y: 0, hopV: 0,
     h: headingAt(i), speed: 0, vx: 0, vz: 0, st: 0,
     drifting: false, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
-    item: null, pending: null, rollT: 0, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
+    item: null, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
   });
   // a touch slower than the player at the top speed, each with its own comfortable gap
   k.ai.skill = CC[cls()].ai * rnd(0.93, 0.97);
@@ -331,14 +331,11 @@ function updateHud(dt) {
     if (player.hogs > lastHogs && lastHogs >= 0) { el.ammo.classList.remove('pop'); void el.ammo.offsetWidth; el.ammo.classList.add('pop'); }
     lastHogs = player.hogs;
   }
-  let slot;
-  if (player.rollT > 0) slot = 'roll:' + ['fire', 'icecream', 'turbo'][Math.floor(gTime * 14) % 3];
-  else slot = player.item || '';
+  const slot = player.item || '';
   if (slot !== lastSlot) {
-    const key = slot.replace('roll:', '');
-    el.slot.innerHTML = key ? ICONS[key] : '';
-    el.slot.classList.toggle('rolling', slot.startsWith('roll:'));
-    el.slotLabel.textContent = slot.startsWith('roll:') ? '…' : key ? ITEM_NAMES[key] : 'Prázdné';
+    el.slot.innerHTML = slot ? ICONS[slot] : '';
+    el.slotLabel.textContent = slot ? ITEM_NAMES[slot] : 'Prázdné';
+    if (slot) { el.slot.classList.remove('pop'); void el.slot.offsetWidth; el.slot.classList.add('pop'); }
     lastSlot = slot;
   }
   const ch = player.drifting ? player.driftCharge : 0;
@@ -521,14 +518,13 @@ function simulate(dt) {
       inp = playerInput();
       // one fire button: the item from a box goes first, otherwise a hedgehog
       if (firePressed) {
-        if (k.item && k.rollT <= 0) useItem(k);
+        if (k.item) useItem(k);
         else if (k.hogs > 0) throwHog(k);
-        else if (msgTimer <= 0 && k.rollT <= 0) showMsg('Žádní ježci!', 0.8);
+        else if (msgTimer <= 0) showMsg('Žádní ježci!', 0.8);
       }
     } else inp = aiInput(k, dt);
     if (k.hogCd > 0) k.hogCd -= dt;
     if (k.safe > 0) k.safe -= dt;
-    if (k.rollT > 0) { k.rollT -= dt; if (k.rollT <= 0) { k.item = k.pending; k.pending = null; } }
     const lapBefore = k.lap;
     stepKart(k, inp, dt);
     if (k.isPlayer && k.lap > lapBefore && k.lap < LAPS && k.lap > 0) showMsg(k.lap === LAPS - 1 ? 'Poslední kolo!' : `Kolo ${k.lap + 1}`);
@@ -563,9 +559,10 @@ function simulate(dt) {
       if (dx * dx + dz * dz < 2.5 * 2.5) {
         b.m.visible = false; b.respawn = 2.5;
         burst(b.m.position.x, 1.3, b.m.position.z, 16, 1, 0.8, 0.5);
-        if (!k.item && k.rollT <= 0) {
-          if (k.isPlayer) { k.pending = rollItem(k); k.rollT = 1.0; sfx.pickup(); }
-          else { k.item = rollItem(k); k.ai.itemT = rnd(1, 4); }
+        if (!k.item) {
+          k.item = rollItem(k);
+          if (k.isPlayer) sfx.pickup();
+          else k.ai.itemT = rnd(1, 4);
         }
         break;
       }

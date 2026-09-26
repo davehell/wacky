@@ -49,8 +49,7 @@ body {
   border: 4px solid #fff; box-shadow: 0 5px 0 var(--ink); display: grid; place-items: center;
 }
 .slot svg { width: 64px; height: 64px; }
-.slot.rolling svg { animation: wobble 0.12s linear infinite; }
-@keyframes wobble { 50% { transform: scale(0.85) rotate(-8deg); } }
+.slot.pop { animation: bump 0.3s ease-out; }
 .ammo {
   position: relative; width: 72px; height: 72px; border-radius: 18px; background: var(--paper);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -181,5 +180,5 @@ body.is-touch .hud__br { bottom: calc(110px + env(safe-area-inset-bottom, 0px));
   .ammo svg { width: 38px; height: 38px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .msg.pop, .cd.pop, .slot.rolling svg, .ammo.pop { animation: none; }
+  .msg.pop, .cd.pop, .slot.pop, .ammo.pop { animation: none; }
 }
