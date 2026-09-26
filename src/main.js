@@ -258,6 +258,7 @@ function useItem(k) {
   if (it === 'icecream') {
     // lobbed in a high arc onto the road ahead, where everyone can see it land
     const m = makeIceCream();
+    m.scale.setScalar(1.5);
     m.userData.splat.visible = false;
     projectiles.push({ kind: 'ice', idx: (k.idx + 2) % N, f: 0, lat: k.lat, speed: Math.max(46, k.speed + 20), owner: k, life: ICE_FLIGHT, age: 0, target: null, mesh: m });
     if (k.isPlayer) sfx.throw();
@@ -646,7 +647,7 @@ function simulate(dt) {
     let hit = false;
     for (const k of karts) {
       if (k.y > 0.4 || (k === h.owner && h.ownerSafe > 0)) continue;
-      if ((k.x - h.x) ** 2 + (k.z - h.z) ** 2 < 1.7 * 1.7) { hitKart(k, null); hit = true; break; }
+      if ((k.x - h.x) ** 2 + (k.z - h.z) ** 2 < 2.1 * 2.1) { hitKart(k, null); hit = true; break; }
     }
     if (hit || h.life <= 0) { scene.remove(h.m); hazards.splice(n, 1); }
   }
