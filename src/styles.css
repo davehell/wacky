@@ -69,6 +69,8 @@ body {
 }
 .icon-btn:focus-visible, button:focus-visible { outline: 3px solid var(--cherry); outline-offset: 2px; }
 .icon-btn svg { width: 20px; height: 20px; }
+.icon-btn--menu { position: absolute; top: 18px; right: 18px; flex: none; background: #fff; }
+.icon-btn--menu + .eyebrow { padding-right: 48px; }
 .hud__br { position: absolute; right: calc(20px + env(safe-area-inset-right, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
 #mini {
   width: clamp(140px, 16vw, 220px); aspect-ratio: 1; max-width: 100%; border-radius: 22px; display: block;
