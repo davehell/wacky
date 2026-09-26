@@ -813,3 +813,7 @@ resize();
 camera.position.set(player.x + 10, 5, player.z + 10);
 requestAnimationFrame(loop);
 
+
+// installable app: the service worker keeps the game playable offline (not in dev, where it would
+// serve stale modules instead of the live ones)
+if (import.meta.env.PROD && 'serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
