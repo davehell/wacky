@@ -10,6 +10,8 @@ import { initAudio, sfx, setEngine, updateOpponents, silenceEngine, toggleMute }
 
 /* ================= Game state ================= */
 // Opponents carry only a few hedgehogs and take turns at the player, so a leader is never pelted non-stop
+// Drift charge levels for the small and the big turbo, reachable within one ordinary bend
+const DRIFT_MINI = 0.5, DRIFT_BIG = 1.2;
 const AI_MAX_HOGS = 2, AI_SHOT_GAP = 4.5, SAFE_AFTER_HIT = 2.2;
 const CC = [
   { base: 30, ai: 0.9, label: '50 cc', in: 'v 50 cc' },
@@ -164,9 +166,9 @@ function stepKart(k, inp, dt) {
     k.drifting = true; k.driftDir = Math.sign(k.st); k.driftCharge = 0; k.hopV = 4.5;
   }
   if (k.drifting && (!inp.drift || k.speed < 8)) {
-    if (k.driftCharge > 1.8) k.boost = Math.max(k.boost, 1.15);
-    else if (k.driftCharge > 0.8) k.boost = Math.max(k.boost, 0.55);
-    if (k.isPlayer && k.driftCharge > 0.8) sfx.boost();
+    if (k.driftCharge > DRIFT_BIG) k.boost = Math.max(k.boost, 1.2);
+    else if (k.driftCharge > DRIFT_MINI) k.boost = Math.max(k.boost, 0.65);
+    if (k.isPlayer && k.driftCharge > DRIFT_MINI) sfx.boost();
     k.drifting = false;
   }
   const sf = clamp(Math.abs(k.speed) / 7, 0, 1) * (k.speed < 0 ? -1 : 1);
@@ -174,7 +176,7 @@ function stepKart(k, inp, dt) {
   if (k.drifting) {
     const into = k.st * k.driftDir;
     yaw = k.driftDir * (1.3 + 0.75 * into);
-    if (!off) k.driftCharge += dt * (0.7 + 0.5 * Math.max(0, into));
+    if (!off) k.driftCharge += dt * (1.5 + 0.6 * Math.max(0, into));
   } else yaw = k.st * 2.0 * (k.kid ? 0.8 : 1);
   k.h -= yaw * sf * dt;
 
@@ -202,7 +204,7 @@ function stepKart(k, inp, dt) {
   // effects
   const rx = k.x - fx * 1.3, rz = k.z - fz * 1.3;
   if (k.drifting && Math.random() < 0.9) {
-    const c = k.driftCharge > 1.8 ? [1, 0.5, 0.12] : k.driftCharge > 0.8 ? [0.3, 0.65, 1] : [0.5, 0.5, 0.5];
+    const c = k.driftCharge > DRIFT_BIG ? [1, 0.5, 0.12] : k.driftCharge > DRIFT_MINI ? [0.3, 0.65, 1] : [0.5, 0.5, 0.5];
     for (const sgn of [-1, 1]) emit(rx + fz * sgn * 1.05, 0.3, rz - fx * sgn * 1.05, rnd(-2, 2), rnd(1, 4), rnd(-2, 2), c[0], c[1], c[2], 0.35, 12);
   }
   if (k.boost > 0) emit(k.x - fx * 1.9, 0.75 + k.y, k.z - fz * 1.9, -fx * 8 + rnd(-1, 1), rnd(0, 2), -fz * 8 + rnd(-1, 1), 1, rnd(0.35, 0.6), 0.1, 0.25);
@@ -340,8 +342,8 @@ function updateHud(dt) {
     lastSlot = slot;
   }
   const ch = player.drifting ? player.driftCharge : 0;
-  el.drift.style.width = `${clamp(ch / 1.8, 0, 1) * 100}%`;
-  el.drift.style.background = ch > 1.8 ? '#ff8a1f' : ch > 0.8 ? '#4aa8ff' : '#d6dde8';
+  el.drift.style.width = `${clamp(ch / DRIFT_BIG, 0, 1) * 100}%`;
+  el.drift.style.background = ch > DRIFT_BIG ? '#ff8a1f' : ch > DRIFT_MINI ? '#4aa8ff' : '#d6dde8';
   if (msgTimer > 0) { msgTimer -= dt; if (msgTimer <= 0) el.msg.hidden = true; }
   drawMini();
 }
