@@ -126,6 +126,16 @@ const sfx = {
     else { note(1568, 0, 0.16, 'triangle', 0.07); note(2093, 0.06, 0.16, 'triangle', 0.06); note(2637, 0.12, 0.3, 'triangle', 0.05); }
   },
   shift: () => whoosh(0, 0.09, 'bandpass', 2500, 1200, 0.05, 2),
+  // a soap bubble blown up round the kart: a soft rising shimmer
+  bubble: () => { [659, 880, 1109, 1319].forEach((f, i) => note(f, i * 0.06, 0.3, 'sine', 0.06, f * 1.06)); whoosh(0, 0.45, 'bandpass', 600, 2400, 0.06, 2); },
+  // and bursting: a light "plop"
+  pop: () => { note(1100, 0, 0.09, 'sine', 0.14, 380); whoosh(0, 0.12, 'highpass', 2500, 5000, 0.06, 0.8); note(1760, 0.03, 0.08, 'triangle', 0.04); },
+  // the magnet switches on with a wobbly "wooo-ooo"
+  magnet: () => { [392, 523, 392, 523, 659].forEach((f, i) => note(f, i * 0.07, 0.14, 'triangle', 0.06, f * 1.12)); },
+  // the cloud puffs off towards the leader
+  cloud: () => { whoosh(0, 0.6, 'lowpass', 400, 1600, 0.12, 0.7); note(523, 0, 0.2, 'sine', 0.06, 784); note(784, 0.12, 0.25, 'sine', 0.05, 1047); },
+  // raindrops pattering on the player
+  drizzle: () => { for (let i = 0; i < 10; i++) note(1400 + Math.random() * 900, i * 0.13 + Math.random() * 0.06, 0.07, 'sine', 0.05, 700); },
 };
 function gearOf(v) { let g = 1; while (g < GEARS.length - 1 && v >= GEARS[g]) g++; return g; }
 function revOf(v, g) { const lo = GEARS[g - 1], hi = GEARS[g]; return clamp(0.25 + 0.75 * ((v - lo) / (hi - lo)), 0.2, 1); }

@@ -3,8 +3,8 @@ import { $, clamp, rnd, wrapA, store, hex } from './util.js';
 import { stage, renderer, scene, camera, sky, sun } from './render.js';
 import { N, W, LIM, LAPS, P, T, S, SEG, TRACKS, headingAt, nearest, surfaceAt, loadTrack, currentTrack, updateScenery } from './track.js';
 import { CHARS, makeKart, makePortraits } from './characters.js';
-import { ICONS, ITEM_NAMES, boxes, BOX_ROWS, placeBoxes, makeHog, makeFireball, animateFireball, makeIceCream } from './items.js';
-import { MAX_HOGS, hedgehogSpots, placeHedgehogs, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
+import { ICONS, ITEM_NAMES, boxes, BOX_ROWS, placeBoxes, makeHog, makeFireball, animateFireball, makeIceCream, makeBubble, makeMagnet, makeRainCloud } from './items.js';
+import { MAX_HOGS, hedgehogSpots, placeHedgehogs, pullHedgehogs, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
 import { parts, emit, updateParticles, burst } from './particles.js';
 import { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
@@ -13,6 +13,8 @@ import { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine,
 // Drift charge levels for the small and the big turbo, reachable within one ordinary bend
 const DRIFT_MINI = 0.5, DRIFT_BIG = 1.2;
 const ICE_FLIGHT = 0.9;
+// how long a bubble, a magnet and a rain shower last
+const BUBBLE_T = 10, MAGNET_T = 6, RAIN_T = 4;
 const AI_MAX_HOGS = 3, AI_SHOT_GAP = 4.5, SAFE_AFTER_HIT = 2.2;
 const CC = [
   { base: 30, ai: 0.9, label: '50 cc', in: 'v 50 cc' },
@@ -28,11 +30,13 @@ let cupMode = store.get('dk-cup') === '1', cup = null;
 const cls = () => (kid ? 3 : ccIdx);
 let state = 'menu', paused = false, raceTime = 0, cdT = 0, cdShown = null, finishCount = 0, doneT = 0, gTime = 0;
 let player = null, launchAt = null, aiShotT = 0;
-const projectiles = [], hazards = [];
+const projectiles = [], hazards = [], rainClouds = [];
 
 const karts = CHARS.map((ch) => {
   const v = makeKart(ch);
   scene.add(v.root);
+  v.bubble = makeBubble(); v.bubble.visible = false; v.root.add(v.bubble);
+  v.magnet = makeMagnet(); v.magnet.visible = false; v.magnet.position.y = 3.9; v.root.add(v.magnet);
   return { ch, v, ai: { t: 0, phase: rnd(0, 6.28), freq: rnd(0.25, 0.45), itemT: 0, hogT: 0, skill: 1 } };
 });
 
@@ -45,7 +49,7 @@ function resetKart(k, slot) {
     x: P[i].x + S[i].x * lat, z: P[i].z + S[i].z * lat, y: 0, hopV: 0,
     h: headingAt(i), speed: 0, vx: 0, vz: 0, st: 0,
     drifting: false, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
-    item: null, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, shake: 0, crashCd: 0, pushX: 0, pushZ: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
+    item: null, bubble: 0, magnet: 0, rain: 0, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, shake: 0, crashCd: 0, pushX: 0, pushZ: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
   });
   // a touch slower than the player at the top speed, each with its own comfortable gap
   k.ai.skill = CC[cls()].ai * rnd(0.93, 0.97);
@@ -80,6 +84,14 @@ function syncKart(k, dt) {
   v.head.rotation.y = -k.st * 0.25;
   // blinking while protected after a hit
   v.root.visible = !(k.safe > 0 && k.spin <= 0 && Math.floor(k.safe * 10) % 2);
+  // the bubble wobbles and blinks when it is about to burst; the magnet spins over the driver's head
+  v.bubble.visible = k.bubble > 0 && (k.bubble > 2 || Math.floor(k.bubble * 8) % 2 === 0);
+  if (v.bubble.visible) {
+    v.bubble.material.uniforms.t.value = gTime;
+    v.bubble.scale.set(1 + Math.sin(gTime * 7) * 0.03, 1 + Math.sin(gTime * 7 + 2) * 0.03, 1 + Math.sin(gTime * 6 + 4) * 0.03);
+  }
+  v.magnet.visible = k.magnet > 0;
+  if (v.magnet.visible) { v.magnet.rotation.y += dt * 4; v.magnet.position.y = 3.9 + Math.sin(gTime * 5) * 0.15; }
   for (const w of v.wheels) w.rotation.x += (k.speed * dt) / 0.48;
   for (const p of v.pivots) p.rotation.y = -k.st * 0.45;
 }
@@ -164,6 +176,7 @@ function stepKart(k, inp, dt) {
   const surf = surfaceAt(k.idx, k.lat), off = surf.rumble > 0;
   k.surf = surf;
   let maxS = base * k.mul * surf.speed;
+  if (k.rain > 0) { k.rain -= dt; maxS *= 0.7; }
   if (k.boost > 0) { k.boost -= dt; maxS = Math.max(maxS, base * 1.38); k.speed += 55 * dt; }
   else if (inp.throttle && k.speed < maxS) k.speed += 25 * dt * (1 - 0.55 * Math.max(0, k.speed) / maxS);
   if (inp.brake) { k.speed -= (k.speed > 0 ? 45 : 14) * dt; if (k.speed < -11) k.speed = -11; }
@@ -302,6 +315,7 @@ function crash(k, s, x, z) {
 // kind: 'hog', 'fire' or 'ice'
 function hitKart(k, by, kind) {
   if (k.spin > 0 || k.safe > 0) return;
+  if (k.bubble > 0) { popBubble(k); if (k.isPlayer) showMsg('Bublina tě ochránila!', 1.1); return; }
   k.spin = 1.1; k.spinDir = Math.random() < 0.5 ? -1 : 1; k.drifting = false; k.boost = 0; k.shake = 1;
   if (k.isPlayer) k.safe = k.spin + SAFE_AFTER_HIT;
   burst(k.x, 1.2, k.z, 26, 1, 0.85, 0.2);
@@ -309,6 +323,13 @@ function hitKart(k, by, kind) {
   else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); }
 }
 
+function popBubble(k) {
+  k.bubble = 0; k.safe = Math.max(k.safe, 0.6);
+  burst(k.x, 1.4, k.z, 30, 0.7, 0.9, 1);
+  if (k.isPlayer || (player && Math.hypot(k.x - player.x, k.z - player.z) < 30)) sfx.pop();
+}
+// the rain cloud goes for whoever leads the race, or for the next one if that is the thrower
+function leaderFor(k) { return ranked().find((o) => o !== k && !o.finished) || null; }
 function targetAhead(k) {
   let best = null, bd = Infinity;
   for (const o of karts) { if (o === k || o.finished) continue; const d = o.prog - k.prog; if (d > 0 && d < bd) { bd = d; best = o; } }
@@ -319,6 +340,15 @@ function useItem(k) {
   if (!it) return;
   k.item = null;
   if (it === 'turbo') { k.boost = Math.max(k.boost, 1.6); if (k.isPlayer) sfx.boost(); }
+  if (it === 'bubble') { k.bubble = BUBBLE_T; if (k.isPlayer) sfx.bubble(); }
+  if (it === 'magnet') { k.magnet = MAGNET_T; if (k.isPlayer) sfx.magnet(); }
+  if (it === 'cloud') {
+    const tg = leaderFor(k);
+    if (tg) {
+      rainClouds.push({ m: makeRainCloud(), tg, owner: k, x: k.x, y: k.y + 3, z: k.z, rain: 0, age: 0 });
+      if (k.isPlayer) sfx.cloud();
+    }
+  }
   if (it === 'fire') {
     // three fireballs fanning out along the road
     for (const s of [-1, 0, 1]) {
@@ -344,9 +374,13 @@ function throwHog(k) {
 function rollItem(k) {
   const rank = karts.filter((o) => o.prog > k.prog).length + 1;
   // turbo is common, and more so the further back the kart is; the rest splits evenly
-  const pT = 0.34 + 0.07 * (rank - 1);
-  const r = Math.random();
-  return r < pT ? 'turbo' : r < pT + (1 - pT) / 2 ? 'fire' : 'icecream';
+  const pT = 0.26 + 0.06 * (rank - 1);
+  if (Math.random() < pT) return 'turbo';
+  // a bubble helps most at the front; the rain cloud is for those who chase the leader
+  const w = { fire: 1, icecream: 1, magnet: 0.8, bubble: rank <= 3 ? 1.1 : 0.6, cloud: rank === 1 ? 0 : rank >= 3 ? 1 : 0.4 };
+  let r = Math.random() * Object.values(w).reduce((a, b) => a + b, 0);
+  for (const [it, p] of Object.entries(w)) { r -= p; if (r <= 0) return it; }
+  return 'fire';
 }
 
 function aiInput(k, dt) {
@@ -373,6 +407,7 @@ function aiInput(k, dt) {
         else if (a.itemT < -8 && !(tg && tg.isPlayer)) useItem(k);
       }
       else if (k.item === 'turbo') { if (bend < 0.3) useItem(k); }
+      else if (k.item === 'cloud') { const tg = leaderFor(k); if (fair(tg)) { useItem(k); shotAt(tg); } }
       else useItem(k);
     }
   }
@@ -573,7 +608,8 @@ function startRace() {
   placeGrid();
   for (const p of projectiles) scene.remove(p.mesh);
   for (const h of hazards) scene.remove(h.m);
-  projectiles.length = hazards.length = 0;
+  for (const c of rainClouds) scene.remove(c.m);
+  projectiles.length = hazards.length = rainClouds.length = 0;
   for (const b of boxes) { b.respawn = 0; b.m.visible = true; }
   resetHedgehogs();
   for (const q of parts) q.life = 0;
@@ -708,6 +744,8 @@ function simulate(dt) {
       }
     } else inp = aiInput(k, dt);
     if (k.hogCd > 0) k.hogCd -= dt;
+    if (k.bubble > 0) k.bubble -= dt;
+    if (k.magnet > 0) { k.magnet -= dt; pullHedgehogs(k, dt); }
     if (k.safe > 0) k.safe -= dt;
     if (k.crashCd > 0) k.crashCd -= dt;
     if (k.shake > 0) k.shake = Math.max(0, k.shake - dt * 2.5);
@@ -834,6 +872,38 @@ function simulate(dt) {
       if ((k.x - h.x) ** 2 + (k.z - h.z) ** 2 < 2.1 * 2.1) { hitKart(k, h.owner, 'ice'); hit = true; break; }
     }
     if (hit || h.life <= 0) { scene.remove(h.m); hazards.splice(n, 1); }
+  }
+
+  // rain clouds: fly high over the field to their target, then drizzle on it for a while
+  for (let n = rainClouds.length - 1; n >= 0; n--) {
+    const c = rainClouds[n], tg = c.tg, m = c.m;
+    c.age += dt;
+    if (!c.rain) {
+      const dx = tg.x - c.x, dz = tg.z - c.z, d = Math.hypot(dx, dz);
+      const step = Math.min(d, dt * Math.max(70, tg.speed + 35));
+      c.x += (dx / (d || 1)) * step; c.z += (dz / (d || 1)) * step;
+      c.y += ((d > 30 ? 14 : tg.y + 4.2) - c.y) * Math.min(1, dt * 3);
+      m.rotation.y = Math.atan2(dx, dz);
+      if (d < 1.5 && Math.abs(c.y - tg.y - 4.2) < 1.2) {
+        if (tg.finished) c.rain = -1;
+        else if (tg.bubble > 0) { popBubble(tg); c.rain = -1; if (tg.isPlayer) showMsg('Bublina tě ochránila!', 1.1); }
+        else {
+          c.rain = RAIN_T; tg.rain = RAIN_T;
+          if (tg.isPlayer) { showMsg('Prší!', 1.1); sfx.drizzle(); } else if (c.owner.isPlayer) { showMsg('Ať zmokne!', 1); sfx.score(); }
+        }
+      }
+    } else if (c.rain > 0) {
+      c.rain -= dt;
+      // a little ahead of the driver, so from behind the kart it is in view but clear of the HUD
+      c.x = tg.x + Math.sin(tg.h) * 1.5; c.z = tg.z + Math.cos(tg.h) * 1.5; c.y = tg.y + 4.2 + Math.sin(c.age * 3) * 0.2;
+      // turned towards the camera, which sits behind the kart
+      m.rotation.y = tg.h + Math.PI;
+      for (let e = 0; e < 5; e++) emit(c.x + rnd(-1.3, 1.3), c.y - 0.6, c.z + rnd(-1.3, 1.3), tg.vx, -14, tg.vz, 0.15, 0.4, 1, 0.3);
+    } else c.rain -= dt;
+    m.position.set(c.x, c.y, c.z);
+    // a cloud that is done floats up and shrinks away
+    if (c.rain < 0) { c.y += dt * 6; m.scale.setScalar(Math.max(0.01, 0.75 * (1 + c.rain))); }
+    if (c.rain <= -1 || c.age > 30) { scene.remove(m); rainClouds.splice(n, 1); }
   }
 
   if (state === 'done') { doneT -= dt; if (doneT <= 0) showResults(); }

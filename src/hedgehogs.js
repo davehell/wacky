@@ -7,7 +7,7 @@ import { N, W, P, S, headingAt } from './track.js';
 /* ================= Roadside hedgehogs ================= */
 // As in Wacky Wheels, hedgehogs sit on the road going about their business; driving over one adds it to
 // the kart's ammo. Every hedgehog has one of several everyday activities and switches to another now and then.
-const MAX_HOGS = 10, SIZE = 1.2, PICK_R = 2.6;
+const MAX_HOGS = 10, SIZE = 1.2, PICK_R = 2.6, MAGNET_R = 30;
 
 const SPH = new THREE.SphereGeometry(1, 20, 14);
 const CYL = new THREE.CylinderGeometry(1, 1, 1, 16);
@@ -415,7 +415,7 @@ const spots = [];
     const c = makeHedgehog();
     c.root.scale.setScalar(SIZE);
     scene.add(c.root);
-    const sp = { c, x: 0, z: 0, act: 0, anim: null, bag: [], t: rnd(0, 10), here: true, respawn: 0, switchT: rnd(15, 30), grow: 1 };
+    const sp = { c, x: 0, z: 0, hx: 0, hz: 0, pulled: 0, act: 0, anim: null, bag: [], t: rnd(0, 10), here: true, respawn: 0, switchT: rnd(15, 30), grow: 1 };
     setAct(sp, order[n % order.length]);
     spots.push(sp);
   }
@@ -427,7 +427,8 @@ function placeHedgehogs(avoid) {
     for (let g = 0; g < 8 && avoid.some((a) => Math.abs(a - i) < 14); g++) i += 16;
     // spread across the road, but well away from its edges
     const lat = ((n * 5) % 9 - 4) * (W * 0.55) / 4;
-    sp.x = P[i].x + S[i].x * lat; sp.z = P[i].z + S[i].z * lat;
+    sp.x = sp.hx = P[i].x + S[i].x * lat; sp.z = sp.hz = P[i].z + S[i].z * lat;
+    sp.home = headingAt(i) + Math.PI;
     sp.c.root.position.set(sp.x, 0, sp.z);
     sp.c.root.rotation.y = headingAt(i) + Math.PI;
   });
@@ -440,7 +441,21 @@ function updateHedgehogs(dt, cam) {
       sp.respawn -= dt;
       if (sp.respawn > 0) continue;
       setAct(sp, nextAct(sp));
-      sp.here = true; sp.grow = 0;
+      sp.here = true; sp.grow = 0; sp.pulled = 0;
+      sp.x = sp.hx; sp.z = sp.hz;
+      r.position.set(sp.x, 0, sp.z); r.rotation.y = sp.home;
+    }
+    if (sp.pulled > 0) {
+      // flying towards a magnet, curled up and spinning
+      sp.pulled -= dt;
+      r.position.set(sp.x, 0.9 + Math.sin(sp.t * 14) * 0.25, sp.z);
+      r.rotation.y += dt * 12;
+    } else if (sp.x !== sp.hx || sp.z !== sp.hz) {
+      // the magnet let go: waddle back to the usual spot
+      const dx = sp.hx - sp.x, dz = sp.hz - sp.z, d = Math.hypot(dx, dz), step = Math.min(d, dt * 5);
+      if (d < 0.05) { sp.x = sp.hx; sp.z = sp.hz; r.rotation.y = sp.home; }
+      else { sp.x += (dx / d) * step; sp.z += (dz / d) * step; r.rotation.y = Math.atan2(dx, dz); }
+      r.position.set(sp.x, Math.abs(Math.sin(sp.t * 9)) * 0.15, sp.z);
     }
     const d2 = (cam.x - sp.x) ** 2 + (cam.z - sp.z) ** 2;
     sp.switchT -= dt;
@@ -467,8 +482,22 @@ function collectHedgehogs(karts, onPick) {
     }
   }
 }
+// A kart with a magnet draws in every hedgehog around it, faster the closer they are
+function pullHedgehogs(k, dt) {
+  if (k.hogs >= (k.maxHogs ?? MAX_HOGS)) return;
+  for (const sp of spots) {
+    if (!sp.here) continue;
+    const dx = k.x - sp.x, dz = k.z - sp.z, d = Math.hypot(dx, dz);
+    if (d > MAGNET_R || d < 0.01) continue;
+    const step = Math.min(d, dt * (Math.abs(k.speed) + 14 + (MAGNET_R - d)));
+    sp.x += (dx / d) * step; sp.z += (dz / d) * step;
+    sp.pulled = 0.25;
+  }
+}
 function resetHedgehogs() {
   for (const sp of spots) {
+    sp.x = sp.hx; sp.z = sp.hz; sp.pulled = 0;
+    sp.c.root.position.set(sp.x, 0, sp.z); sp.c.root.rotation.y = sp.home;
     if (!sp.here) { sp.here = true; setAct(sp, nextAct(sp)); }
     sp.grow = 1;
   }
@@ -484,4 +513,4 @@ function hedgehogPicture() {
   }, 160)[0];
 }
 
-export { MAX_HOGS, spots as hedgehogSpots, placeHedgehogs, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture };
+export { MAX_HOGS, MAGNET_R, spots as hedgehogSpots, placeHedgehogs, pullHedgehogs, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture };

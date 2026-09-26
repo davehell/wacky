@@ -29,7 +29,9 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
 - ježci na trati jako v původní hře: přejetím je sebereš (až 10) a pak je házíš — kutálí se za soupeřem
   před tebou; každý ježek zrovna něco dělá (sedí na záchodě, čte noviny, spí, hraje na kytaru…)
   a činnosti se střídají
-- krabice s otazníkem: oheň (tři ohnivé koule), zmrzlina (past za sebe), turbo
+- krabice s otazníkem: oheň (tři ohnivé koule), zmrzlina (past na trati), turbo, bublina (ochrání
+  před jedním zásahem), magnet (přitáhne ježky z okolí) a mráček (doletí k vedoucímu jezdci
+  a chvíli na něj prší, takže zpomalí)
 - třídy 50 / 100 / 150 cc a dětský režim, minimapa, osobní rekordy
 - syntetizovaný zvuk motoru s řazením, motory soupeřů s dopplerovým efektem
 - ovládání klávesnicí, gamepadem i dotykem
