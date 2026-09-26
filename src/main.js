@@ -78,7 +78,7 @@ function syncKart(k, dt) {
 
 /* ================= Input ================= */
 const keys = new Set();
-const touch = { left: false, right: false, brake: false, drift: false };
+const touch = { left: false, right: false, drift: false };
 let firePressed = false, padFirePrev = false;
 const isTouch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
 if (isTouch) document.body.classList.add('is-touch');
@@ -118,8 +118,8 @@ function playerInput() {
   let drift = has('ShiftLeft', 'ShiftRight');
   if (isTouch) {
     steer += (touch.right ? 1 : 0) - (touch.left ? 1 : 0);
-    brake = brake || touch.brake;
-    throttle = throttle || !touch.brake;
+    // on a touch screen the kart always goes full throttle
+    throttle = true;
     drift = drift || touch.drift;
   }
   const pad = readPad();
