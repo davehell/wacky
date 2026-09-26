@@ -226,7 +226,7 @@ function paceMul(k) {
   // behind the player: easy-going at first so a lead is possible, then pressing harder and harder
   if (gap > 0) return k.ai.skill + clamp((gap - k.ai.slack) / 90, 0, 0.45);
   // ahead of the player: wait up
-  return k.ai.skill - clamp((-gap - 12) / 140, 0, 0.32);
+  return k.ai.skill - clamp((-gap - 12) / 120, 0, 0.5);
 }
 
 function hitKart(k, by) {
