@@ -269,10 +269,11 @@ function paceMul(k) {
   // slow waves of pace that now and then carry it past the player and then drop it back again
   const skill = k.ai.skill + (kid ? Math.sin(raceTime * k.ai.surgeF + k.ai.surgeP) * 0.15 : 0);
   // behind the player: easy-going at first so a lead is possible, then pressing harder and harder;
-  // in kids' mode the catch-up bites sooner so a small lapse in driving invites a real overtake
-  if (gap > 0) return skill + clamp((gap - k.ai.slack) / (kid ? 55 : 90), 0, 0.45);
-  // ahead of the player: wait up, but in kids' mode only a little, so taking the lead back is a real race
-  return skill - clamp((-gap - 12) / (kid ? 160 : 120), 0, kid ? 0.25 : 0.5);
+  // in kids' mode the catch-up bites much sooner and much harder, so even a small gap invites a real overtake
+  if (gap > 0) return skill + clamp((gap - k.ai.slack) / (kid ? 40 : 90), 0, kid ? 0.6 : 0.45);
+  // ahead of the player: wait up, but in kids' mode barely at all, so an opponent that gets in front
+  // (by driving well or by landing a hedgehog) actually holds the lead and has to be raced back down
+  return skill - clamp((-gap - 12) / (kid ? 400 : 120), 0, kid ? 0.1 : 0.5);
 }
 
 // Kids' mode: a kart that wanders far off the road, or turns round the wrong way, is put back
