@@ -26,7 +26,6 @@ The audience is children: characters must be cute and recognisable at a glance, 
 | `src/hedgehogs.js`  | hedgehogs sitting on the road as ammo pickups, their activities and props         |
 | `src/particles.js`  | pooled additive particles                                                          |
 | `src/audio.js`      | Web Audio: synthesised engine, opponents' engines with doppler, wind, skid, sfx    |
-| `src/music.js`      | calm generated background music (pad, bass, marimba), ducked under sfx             |
 | `src/main.js`       | game state, input, kart physics, AI, HUD, menu, main loop                          |
 
 ## Conventions
