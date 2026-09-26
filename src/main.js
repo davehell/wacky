@@ -3,7 +3,7 @@ import { $, clamp, rnd, wrapA, store, hex } from './util.js';
 import { stage, renderer, scene, camera, sky, sun } from './render.js';
 import { N, W, LIM, LAPS, P, T, S, SEG, headingAt, nearest, clouds } from './track.js';
 import { CHARS, makeKart, makePortraits } from './characters.js';
-import { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, makeIceCream } from './items.js';
+import { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, animateFireball, makeIceCream } from './items.js';
 import { MAX_HOGS, hedgehogSpots, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
 import { parts, emit, updateParticles, burst } from './particles.js';
 import { initAudio, sfx, setEngine, updateOpponents, silenceEngine, toggleMute } from './audio.js';
@@ -613,9 +613,14 @@ function simulate(dt) {
     const i0 = pr.idx, i1 = (pr.idx + 1) % N;
     const x = P[i0].x + (P[i1].x - P[i0].x) * pr.f + S[i0].x * pr.lat, z = P[i0].z + (P[i1].z - P[i0].z) * pr.f + S[i0].z * pr.lat;
     if (fire) {
-      pr.mesh.position.set(x, 0.95, z);
-      pr.mesh.userData.halo.scale.setScalar(1 + Math.sin(pr.age * 30) * 0.12);
-      for (let e = 0; e < 2; e++) emit(x + rnd(-0.3, 0.3), 0.95 + rnd(-0.3, 0.3), z + rnd(-0.3, 0.3), rnd(-1.5, 1.5), rnd(1, 3.5), rnd(-1.5, 1.5), 1, rnd(0.3, 0.6), 0.08, rnd(0.25, 0.4));
+      const m = pr.mesh, dx = x - m.position.x, dz = z - m.position.z;
+      if (pr.age > dt) m.rotation.y = Math.atan2(dx, dz);
+      m.position.set(x, 1.05, z);
+      animateFireball(m, pr.age);
+      // flames licking backwards, and a few sparks that fall away
+      const fx = Math.sin(m.rotation.y), fz = Math.cos(m.rotation.y);
+      for (let e = 0; e < 3; e++) emit(x - fx * rnd(0.6, 1.6) + rnd(-0.4, 0.4), 1.05 + rnd(-0.4, 0.4), z - fz * rnd(0.6, 1.6) + rnd(-0.4, 0.4), rnd(-1.5, 1.5), rnd(1, 3.5), rnd(-1.5, 1.5), 1, rnd(0.25, 0.55), 0.05, rnd(0.25, 0.45));
+      if (Math.random() < 0.5) emit(x, 1.05, z, rnd(-4, 4), rnd(2, 6), rnd(-4, 4), 1, 0.9, 0.5, rnd(0.3, 0.5), 14);
     } else {
       pr.mesh.position.set(x, 0.62, z);
       pr.mesh.rotation.y = headingAt(i0);
@@ -628,7 +633,7 @@ function simulate(dt) {
       if ((k.x - x) ** 2 + (k.z - z) ** 2 < (fire ? 2.1 : 1.9) ** 2) { hitKart(k, pr.owner); hit = true; break; }
     }
     if (hit || pr.life <= 0) {
-      if (fire) burst(x, 1, z, 16, 1, 0.45, 0.1);
+      if (fire) { burst(x, 1, z, 22, 1, 0.45, 0.08); burst(x, 1, z, 10, 1, 0.85, 0.4); }
       else if (!hit) burst(x, 0.6, z, 10, 0.6, 0.45, 0.3);
       scene.remove(pr.mesh); projectiles.splice(n, 1);
     }

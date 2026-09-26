@@ -8,7 +8,7 @@ import { N, P, S } from './track.js';
 const ICONS = {
   hedgehog: '<svg viewBox="0 0 64 64"><path d="M6 46 9 33l5 5 3-15 6 10 4-16 6 13 5-14 5 13 6-9 3 26z" fill="#5a3620"/><ellipse cx="44" cy="44" rx="14" ry="10" fill="#d9a066"/><circle cx="48" cy="40" r="2.4" fill="#14213d"/><circle cx="58" cy="45" r="3" fill="#14213d"/><rect x="6" y="45" width="40" height="5" rx="2.5" fill="#5a3620"/></svg>',
   icecream: '<svg viewBox="0 0 64 64"><path d="M20 30h24L32 60z" fill="#e0a458" stroke="#b97c35" stroke-width="2" stroke-linejoin="round"/><circle cx="32" cy="24" r="14" fill="#f7a8b8"/><circle cx="24" cy="30" r="7" fill="#f7a8b8"/><circle cx="40" cy="30" r="7" fill="#f7a8b8"/><circle cx="34" cy="9" r="4" fill="#ef476f"/></svg>',
-  fire: '<svg viewBox="0 0 64 64"><defs><g id="fl"><path d="M12 30C5 30 1 25 2 19c1-5 5-7 5-13 4 3 6 6 6 9 2-2 2-5 2-8 5 4 8 9 8 14 0 6-5 9-11 9z" fill="#ff7b25" stroke="#b33a0e" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="22" r="5" fill="#ffd166"/></g></defs><use href="#fl" x="20" y="1"/><use href="#fl" x="2" y="31"/><use href="#fl" x="38" y="31"/></svg>',
+  fire: '<svg viewBox="0 0 64 64"><path d="M22 54C10 52 8 38 16 30L58 4 42 24 62 18 44 36 60 36 34 54z" fill="#ff7b25" stroke="#b33a0e" stroke-width="2.5" stroke-linejoin="round"/><path d="M24 46 48 16 38 30 52 28 36 42z" fill="#ffd166"/><circle cx="23" cy="42" r="15" fill="#ff9a1f" stroke="#b33a0e" stroke-width="2.5"/><circle cx="23" cy="42" r="10" fill="#ffd166"/><circle cx="20" cy="45" r="4.5" fill="#fff6d0"/></svg>',
   turbo: '<svg viewBox="0 0 64 64"><path d="M36 4 12 36h16l-6 24 30-36H35z" fill="#ffc93c" stroke="#14213d" stroke-width="3" stroke-linejoin="round"/></svg>',
 };
 const ITEM_NAMES = { fire: 'Oheň', icecream: 'Zmrzlina', turbo: 'Turbo' };
@@ -59,18 +59,63 @@ function makeHog() {
   scene.add(outer);
   return outer;
 }
-// A glowing ball of fire: bright core inside a soft additive halo
-const FIRE_CORE = new THREE.SphereGeometry(0.45, 16, 12), FIRE_HALO = new THREE.SphereGeometry(0.85, 16, 12);
-const fireCoreMat = new THREE.MeshBasicMaterial({ color: col(0xfff1a8) });
-const fireHaloMat = new THREE.MeshBasicMaterial({ color: col(0xff7b25), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+// A dragon's fireball: a white-hot core in two lumpy, churning flame shells, trailing licking flame tongues.
+// Local +z is the direction of flight.
+function lumpy(r, amp, seed) {
+  const g = new THREE.IcosahedronGeometry(r, 2), p = g.attributes.position, v = new THREE.Vector3();
+  for (let n = 0; n < p.count; n++) {
+    v.fromBufferAttribute(p, n);
+    const u = v.clone().normalize();
+    const k = 1 + amp * Math.sin(u.x * 5 + seed) * Math.sin(u.y * 6 + seed * 2) * Math.sin(u.z * 4 + seed * 3);
+    // stretched backwards like a comet
+    v.multiplyScalar(k);
+    if (v.z < 0) v.z *= 1.35;
+    p.setXYZ(n, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+// tongue colour from the hot base to the fading tip (canvas bottom = base)
+const flameTex = canvasTex(8, 64, (g, w, h) => {
+  const gr = g.createLinearGradient(0, 0, 0, h);
+  gr.addColorStop(0, 'rgba(200,30,10,0)'); gr.addColorStop(0.4, 'rgba(235,60,15,0.75)'); gr.addColorStop(0.75, 'rgba(255,130,25,0.95)'); gr.addColorStop(1, 'rgba(255,215,90,1)');
+  g.fillStyle = gr; g.fillRect(0, 0, w, h);
+});
+const flameMat = (opts) => new THREE.MeshBasicMaterial(Object.assign({ transparent: true, depthWrite: false }, opts));
+const FIRE_CORE = new THREE.SphereGeometry(0.46, 16, 12);
+const FIRE_INNER = lumpy(0.62, 0.22, 1.3), FIRE_OUTER = lumpy(0.9, 0.3, 4.1);
+const FIRE_TONGUE = new THREE.ConeGeometry(0.45, 2.2, 12, 1, true).rotateX(-Math.PI / 2).translate(0, 0, -0.75);
+const fireCoreMat = new THREE.MeshBasicMaterial({ color: col(0xfff6d0) });
+const fireInnerMat = flameMat({ color: col(0xff9a1f), opacity: 0.8 });
+const fireOuterMat = flameMat({ color: col(0xe8340f), opacity: 0.45 });
+const fireTongueMat = flameMat({ map: flameTex, side: THREE.DoubleSide });
 function makeFireball() {
   const g = new THREE.Group();
   g.add(new THREE.Mesh(FIRE_CORE, fireCoreMat));
-  const halo = new THREE.Mesh(FIRE_HALO, fireHaloMat);
-  g.add(halo);
-  g.userData.halo = halo;
+  const inner = new THREE.Mesh(FIRE_INNER, fireInnerMat), outer = new THREE.Mesh(FIRE_OUTER, fireOuterMat);
+  g.add(inner, outer);
+  const tongues = [];
+  for (let n = 0; n < 4; n++) {
+    const t = new THREE.Mesh(FIRE_TONGUE, fireTongueMat);
+    const a = (n / 4) * Math.PI * 2;
+    t.position.set(Math.cos(a) * 0.22, Math.sin(a) * 0.22, 0);
+    t.rotation.set(Math.sin(a) * 0.08, -Math.cos(a) * 0.08, 0);
+    t.userData.ph = rnd(0, 6);
+    g.add(t); tongues.push(t);
+  }
+  g.userData = { inner, outer, tongues };
   scene.add(g);
   return g;
+}
+function animateFireball(g, t) {
+  const { inner, outer, tongues } = g.userData;
+  inner.rotation.set(t * 7, t * 5, t * 3);
+  outer.rotation.set(-t * 4, t * 6, -t * 5);
+  outer.scale.setScalar(1 + Math.sin(t * 31) * 0.08);
+  for (const tg of tongues) {
+    const f = Math.sin(t * 24 + tg.userData.ph);
+    tg.scale.set(1 + f * 0.12, 1 + f * 0.12, 0.8 + 0.35 * Math.sin(t * 17 + tg.userData.ph * 2));
+  }
 }
 function makeIceCream() {
   const g = new THREE.Group();
@@ -85,4 +130,4 @@ function makeIceCream() {
   return g;
 }
 
-export { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, makeIceCream };
+export { ICONS, ITEM_NAMES, boxes, makeHog, makeFireball, animateFireball, makeIceCream };
