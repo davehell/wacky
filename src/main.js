@@ -358,8 +358,13 @@ function hitKart(k, by, kind) {
   if (k.isPlayer) k.safe = k.spin + SAFE_AFTER_HIT;
   burst(k.x, 1.2, k.z, 26, 1, 0.85, 0.2);
   k.dizzy = k.spin + 1.2;
-  if (k.isPlayer) { showMsg('Au!'); sfx.hit(); sfx.hitBy(kind); }
-  else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); }
+  if (k.isPlayer) {
+    showMsg('Au!'); sfx.hit(); sfx.hitBy(kind); sfx.dizzy();
+    // the whole picture wobbles, the screen edges flash and a tablet gives a little buzz
+    camHit = 1;
+    hitFlash.classList.remove('on'); void hitFlash.offsetWidth; hitFlash.classList.add('on');
+    if (navigator.vibrate) navigator.vibrate([70, 50, 90]);
+  } else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); sfx.dizzy(0.5); }
 }
 
 function popBubble(k) {
@@ -484,7 +489,7 @@ let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1, lastDrift = 0;
   $('#hogIcon').innerHTML = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
 }
 function showMsg(t, dur = 1.3) { el.msg.textContent = t; el.msg.classList.remove('pop'); void el.msg.offsetWidth; el.msg.classList.add('pop'); el.msg.hidden = false; msgTimer = dur; }
-const itemPop = $('#itemPop');
+const itemPop = $('#itemPop'), hitFlash = $('#hitFlash');
 let itemPopTimer = 0;
 function showItemPop(it) {
   $('#itemPopIcon').innerHTML = ICONS[it];
@@ -686,7 +691,7 @@ function startRace() {
   for (const q of parts) q.life = 0;
   finishCount = 0; raceTime = 0; aiShotT = 0; cdT = 3.6; cdShown = null; launchAt = null; doneT = 0;
   state = 'countdown'; paused = false;
-  camH = player.h;
+  camH = player.h; camHit = 0;
   lastHud = {}; lastSlot = '-'; lastHogs = -1; lastDrift = 0;
   el.msg.hidden = true; el.cd.hidden = true; itemPop.hidden = true;
   show('#menu', false); show('#results', false); show('#pause', false); show('#hud', true); show('#touch', isTouch);
@@ -793,7 +798,7 @@ function resize() {
 }
 
 /* ================= Main loop ================= */
-let camH = 0;
+let camH = 0, camHit = 0;
 const camTarget = new THREE.Vector3(), camLook = new THREE.Vector3();
 
 function simulate(dt) {
@@ -1033,10 +1038,13 @@ function updateCamera(dt) {
   const back = k.ch.camBack || 8.8, up = k.ch.camUp || 3.7;
   camTarget.set(k.x - Math.sin(camH) * back, k.y + up, k.z - Math.cos(camH) * back);
   camera.position.lerp(camTarget, 1 - Math.exp(-(state === 'countdown' ? 3 : 10) * dt));
-  const sh = k.shake * k.shake * 0.3;
+  // after a hit on the player the camera shakes harder and rocks from side to side for a moment
+  camHit = Math.max(0, camHit - dt * 1.4);
+  const sh = k.shake * k.shake * 0.3 + camHit * camHit * 0.5;
   camera.position.x += Math.sin(gTime * 61) * sh; camera.position.y += Math.sin(gTime * 53) * sh * 0.6;
   camLook.set(k.x + Math.sin(camH) * 5, k.y + 1.5, k.z + Math.cos(camH) * 5);
   camera.lookAt(camLook);
+  if (camHit > 0) camera.rotateZ(Math.sin(gTime * 14) * 0.07 * camHit);
   const fov = 64 + clamp(Math.abs(k.speed) / 40, 0, 1.4) * 8 + (k.boost > 0 ? 7 : 0);
   camera.fov += (fov - camera.fov) * Math.min(1, dt * 4);
   camera.updateProjectionMatrix();

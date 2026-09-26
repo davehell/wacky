@@ -27,7 +27,8 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
   se vyplatí hlavně s turbem
 - pohár: všechny tři tratě za sebou, body za umístění (10, 8, 6, 4, 2, 1) a zlatý, stříbrný
   nebo bronzový pohár na konci
-- zasaženému jezdci chvíli krouží kolem hlavy hvězdičky
+- zasaženému jezdci chvíli krouží kolem hlavy hvězdičky; když zasáhnou tebe, obraz se zatřese
+  a zakolébá, okraje obrazovky zablikají, zacinkají hvězdičky a tablet krátce zavibruje
 - v cíli pódium pro první tři: každé zvíře slaví po svém, padají konfety a vítěz poháru dostane
   zlatý pohár
 - drift s turbem (modré a oranžové jiskry), raketový start

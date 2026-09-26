@@ -107,6 +107,11 @@ const sfx = {
     note(196, 0, 0.4, 'triangle', 0.06, 392);
   },
   // an opponent the player has hit: a comic "bonk" and a little fanfare
+  // the dizzy stars twinkling round the head: soft little chimes swooping up and down (vol: loudness)
+  dizzy: (vol = 1) => {
+    [1568, 2093, 1760, 2349, 1976, 2637].forEach((f, i) => note(f, 0.25 + i * 0.22, 0.2, 'sine', 0.045 * vol, i % 2 ? f * 0.8 : f * 1.2));
+    note(523, 0.2, 0.9, 'triangle', 0.04 * vol, 392);
+  },
   score: () => { note(620, 0, 0.14, 'sine', 0.13, 310); note(988, 0.12, 0.12, 'triangle', 0.06); note(1319, 0.2, 0.2, 'triangle', 0.06); },
   // the extra layer on top of `hit` telling what it was
   hitBy: (kind) => {
