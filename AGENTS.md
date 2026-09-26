@@ -7,7 +7,7 @@ Rules for anyone (human or agent) who changes this repo.
 **Divoká kola** — an arcade kart racer for children in the spirit of the 1994 DOS game Wacky Wheels,
 rebuilt with modern 3D graphics. Plain JavaScript (ES modules) + [three.js](https://threejs.org/) r128,
 served and built by Vite. No framework, no backend, no image or audio assets: every model, texture and
-sound is generated in code.
+sound is generated in code. The one exception is the app icon in `public/` (see below).
 
 The audience is children: characters must be cute and recognisable at a glance, **including from behind**
 (the camera sits behind the kart), and sound must never be harsh, boomy or monotonous.
@@ -27,8 +27,15 @@ The audience is children: characters must be cute and recognisable at a glance, 
 | `src/particles.js`  | pooled additive particles                                                          |
 | `src/audio.js`      | Web Audio: synthesised engine, opponents' engines with doppler, wind, skid, sfx    |
 | `src/main.js`       | game state, input, kart physics, AI, HUD, menu, main loop                          |
+| `public/`           | PWA files copied as they are: `manifest.webmanifest`, service worker `sw.js`, icons |
 
 ## Conventions
+
+- **App icon exception.** The hedgehog icon's source is `public/icon.svg`. iOS will not take an SVG as a
+  home-screen icon, so `icon-180.png`, `icon-192.png` and `icon-512.png` are rendered from it and
+  committed. They are the only binary images in the repo. After changing the SVG, render the PNGs again
+  (for example with the preinstalled Chromium) and bump `CACHE` in `public/sw.js`, so installed apps
+  pick up the change.
 
 - **Code, comments and identifiers in English.** User-facing text (menu, HUD) in **Czech**.
 - Colours in code go through `col(hex)` (sRGB → linear); canvas textures through `canvasTex`.
