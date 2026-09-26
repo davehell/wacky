@@ -1,4 +1,5 @@
 import { $, clamp, store } from './util.js';
+import { initMusic } from './music.js';
 
 /* ================= Audio ================= */
 let AC = null, master = null, sfxBus = null, noiseBuf = null, pulse = null, eng = null, muted = store.get('dk-muted') === '1';
@@ -23,6 +24,7 @@ function initAudio() {
     noiseBuf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    initMusic(AC, master, noiseBuf);
     // Pulse wave with a 30 % duty cycle: the nasal buzz of a small single-cylinder engine
     const H = 32, re = new Float32Array(H), im = new Float32Array(H);
     for (let n = 1; n < H; n++) im[n] = (Math.sin(n * Math.PI * 0.3) / n) * Math.exp(-n / 14);

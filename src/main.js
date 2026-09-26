@@ -7,6 +7,7 @@ import { ICONS, ITEM_NAMES, boxes, BOX_ROWS, placeBoxes, makeHog, makeFireball, 
 import { MAX_HOGS, hedgehogSpots, placeHedgehogs, pullHedgehogs, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
 import { parts, emit, updateParticles, burst } from './particles.js';
 import { showPodium, hidePodium, podiumOn, updatePodium, podiumCamera } from './podium.js';
+import { playSong, stopSong, setTempo, duckMusic, toggleMusic } from './music.js';
 import { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
 /* ================= Game state ================= */
@@ -128,6 +129,7 @@ addEventListener('keydown', (e) => {
   if (['Space', 'ControlLeft', 'ControlRight'].includes(e.code)) firePressed = true;
   if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
   if (e.code === 'KeyM') toggleMute();
+  if (e.code === 'KeyH') toggleMusic();
   if (e.code === 'Enter' && state === 'menu') start();
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
@@ -683,6 +685,8 @@ function clearField() {
 }
 function startRace() {
   initAudio();
+  // quiet during the countdown, so the beeps are clear
+  stopSong(0.15);
   hidePodium();
   setGearBase(CC[cls()].base);
   placeGrid();
@@ -713,6 +717,7 @@ function toMenu() {
   if (cup) { cup = null; selectTrack(clamp(Number(store.get('dk-track')) || 0, 0, TRACKS.length - 1)); }
   state = 'menu'; paused = false;
   hidePodium(); clearField();
+  playSong('menu');
   show('#hud', false); show('#results', false); show('#pause', false); show('#touch', false); show('#menu', true);
   placeGrid(); showBest(); silenceEngine();
 }
@@ -720,6 +725,7 @@ function togglePause() {
   if (state !== 'race' && state !== 'countdown') return;
   paused = !paused;
   show('#pause', paused);
+  duckMusic(paused);
   if (paused) { silenceEngine(); $('#resumeBtn').focus(); }
 }
 $('#startBtn').addEventListener('click', start);
@@ -734,6 +740,9 @@ $('#againBtn').addEventListener('click', () => {
 $('#menuBtn').addEventListener('click', toMenu);
 $('#pauseBtn').addEventListener('click', togglePause);
 $('#muteBtn').addEventListener('click', toggleMute);
+$('#musicBtn').addEventListener('click', () => { initAudio(); toggleMusic(); if (state === 'menu') playSong('menu'); });
+// browsers only allow sound after the first click or key press, so the menu tune starts then
+for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { if (state === 'menu') { initAudio(); playSong('menu'); } }, { once: true });
 document.addEventListener('visibilitychange', () => { if (document.hidden && !paused && (state === 'race' || state === 'countdown')) togglePause(); });
 
 function showResults() {
@@ -781,6 +790,7 @@ function showResults() {
   showPodium(order, !!cup && cup.round === TRACKS.length - 1);
   podiumCamera(camera.position, camLook, camera.aspect);
   sfx.cheer(order.indexOf(player) < 3);
+  playSong('podium');
   show('#results', true);
   $('#againBtn').focus();
 }
@@ -807,6 +817,7 @@ function simulate(dt) {
     if (cdT > 0 && n <= 3 && n !== cdShown) { cdShown = n; el.cd.textContent = n; el.cd.hidden = false; el.cd.classList.remove('pop'); void el.cd.offsetWidth; el.cd.classList.add('pop'); sfx.beep(); }
     if (cdT <= 0) {
       state = 'race'; sfx.go();
+      playSong(currentTrack().id); setTempo(1);
       el.cd.textContent = 'Jeď!'; el.cd.classList.remove('pop'); void el.cd.offsetWidth; el.cd.classList.add('pop');
       setTimeout(() => { el.cd.hidden = true; }, 800);
       if (launchAt !== null && launchAt < 0.75) { player.boost = 1.2; showMsg('Raketový start!'); sfx.boost(); }
@@ -839,10 +850,13 @@ function simulate(dt) {
     if (k.shake > 0) k.shake = Math.max(0, k.shake - dt * 2.5);
     const lapBefore = k.lap;
     stepKart(k, inp, dt);
-    if (k.isPlayer && k.lap > lapBefore && k.lap < LAPS && k.lap > 0) showMsg(k.lap === LAPS - 1 ? 'Poslední kolo!' : `Kolo ${k.lap + 1}`);
+    if (k.isPlayer && k.lap > lapBefore && k.lap < LAPS && k.lap > 0) {
+      showMsg(k.lap === LAPS - 1 ? 'Poslední kolo!' : `Kolo ${k.lap + 1}`);
+      if (k.lap === LAPS - 1) setTempo(1.08);
+    }
     if (!k.finished && k.lap >= LAPS) {
       k.finished = true; k.finishTime = raceTime; k.place = ++finishCount;
-      if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); silenceEngine(0.4); }
+      if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); silenceEngine(0.4); stopSong(0.5); }
     }
     if (k.kid && !k.finished) rescueKid(k, dt);
     if (k.isPlayer && !k.finished) {

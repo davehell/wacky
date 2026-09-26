@@ -27,6 +27,7 @@ The audience is children: characters must be cute and recognisable at a glance, 
 | `src/podium.js`     | the podium after the finish: blocks, confetti, the cup and each animal's cheering  |
 | `src/particles.js`  | pooled additive particles                                                          |
 | `src/audio.js`      | Web Audio: synthesised engine, opponents' engines with doppler, wind, skid, sfx    |
+| `src/music.js`      | background music composed on the fly: songs, instruments, scheduler                |
 | `src/main.js`       | game state, input, kart physics, AI, HUD, menu, main loop                          |
 
 ## Conventions

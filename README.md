@@ -40,6 +40,8 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
   a chvíli na něj prší, takže zpomalí)
 - třídy 50 / 100 / 150 cc a dětský režim, minimapa, osobní rekordy
 - syntetizovaný zvuk motoru s řazením, motory soupeřů s dopplerovým efektem
+- veselá hudba, která se skládá přímo ve hře: každá trať, menu i pódium mají svou melodii, hlavní
+  motiv zůstává a ostatní části se při každém opakování trochu obmění; v posledním kole zrychlí
 - ovládání klávesnicí, gamepadem i dotykem
 
 ## Ovládání
@@ -52,6 +54,7 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
 | Shift                | drift — drž v zatáčce, puštěním získáš turbo                |
 | Esc                  | pauza                                                       |
 | M                    | zvuk zapnout / vypnout                                      |
+| H                    | hudbu zapnout / vypnout                                     |
 
 Gamepad: RT plyn, LT brzda, RB drift, X nebo Y střelba.
 
