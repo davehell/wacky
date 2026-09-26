@@ -40,8 +40,8 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
   a chvíli na něj prší, takže zpomalí)
 - třídy 50 / 100 / 150 cc a dětský režim, minimapa, osobní rekordy
 - syntetizovaný zvuk motoru s řazením, motory soupeřů s dopplerovým efektem
-- veselá hudba, která se skládá přímo ve hře: každá trať, menu i pódium mají svou melodii, hlavní
-  motiv zůstává a ostatní části se při každém opakování trochu obmění; v posledním kole zrychlí
+- veselá hudba v menu a na pódiu, která se skládá přímo ve hře: hlavní motiv zůstává a prostřední
+  část se při každém opakování trochu obmění; během jízdy hudba nehraje
 - ovládání klávesnicí, gamepadem i dotykem
 
 ## Ovládání

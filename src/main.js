@@ -7,7 +7,7 @@ import { ICONS, ITEM_NAMES, boxes, BOX_ROWS, placeBoxes, makeHog, makeFireball, 
 import { MAX_HOGS, hedgehogSpots, placeHedgehogs, pullHedgehogs, updateHedgehogs, collectHedgehogs, resetHedgehogs, hedgehogPicture } from './hedgehogs.js';
 import { parts, emit, updateParticles, burst } from './particles.js';
 import { showPodium, hidePodium, podiumOn, updatePodium, podiumCamera } from './podium.js';
-import { playSong, stopSong, setTempo, duckMusic, toggleMusic } from './music.js';
+import { playSong, stopSong, toggleMusic } from './music.js';
 import { initAudio, sfx, setEngine, setGearBase, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
 /* ================= Game state ================= */
@@ -702,7 +702,7 @@ function clearField() {
 }
 function startRace() {
   initAudio();
-  // quiet during the countdown, so the beeps are clear
+  // the music plays in the menu and on the podium, never during the race
   stopSong(0.15);
   hidePodium();
   setGearBase(CC[cls()].base);
@@ -742,7 +742,6 @@ function togglePause() {
   if (state !== 'race' && state !== 'countdown') return;
   paused = !paused;
   show('#pause', paused);
-  duckMusic(paused);
   if (paused) { silenceEngine(); $('#resumeBtn').focus(); }
 }
 $('#startBtn').addEventListener('click', start);
@@ -834,7 +833,6 @@ function simulate(dt) {
     if (cdT > 0 && n <= 3 && n !== cdShown) { cdShown = n; el.cd.textContent = n; el.cd.hidden = false; el.cd.classList.remove('pop'); void el.cd.offsetWidth; el.cd.classList.add('pop'); sfx.beep(); }
     if (cdT <= 0) {
       state = 'race'; sfx.go();
-      playSong(currentTrack().id); setTempo(1);
       el.cd.textContent = 'Jeď!'; el.cd.classList.remove('pop'); void el.cd.offsetWidth; el.cd.classList.add('pop');
       setTimeout(() => { el.cd.hidden = true; }, 800);
       if (launchAt !== null && launchAt < 0.75) { player.boost = 1.2; showMsg('Raketový start!'); sfx.boost(); }
@@ -867,13 +865,10 @@ function simulate(dt) {
     if (k.shake > 0) k.shake = Math.max(0, k.shake - dt * 2.5);
     const lapBefore = k.lap;
     stepKart(k, inp, dt);
-    if (k.isPlayer && k.lap > lapBefore && k.lap < LAPS && k.lap > 0) {
-      showMsg(k.lap === LAPS - 1 ? 'Poslední kolo!' : `Kolo ${k.lap + 1}`);
-      if (k.lap === LAPS - 1) setTempo(1.08);
-    }
+    if (k.isPlayer && k.lap > lapBefore && k.lap < LAPS && k.lap > 0) showMsg(k.lap === LAPS - 1 ? 'Poslední kolo!' : `Kolo ${k.lap + 1}`);
     if (!k.finished && k.lap >= LAPS) {
       k.finished = true; k.finishTime = raceTime; k.place = ++finishCount;
-      if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); silenceEngine(0.4); stopSong(0.5); }
+      if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); silenceEngine(0.4); }
     }
     if (k.kid && !k.finished) rescueKid(k, dt);
     if (k.isPlayer && !k.finished) {
