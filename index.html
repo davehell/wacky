@@ -106,7 +106,12 @@
     <button class="tbtn tbtn--fire" data-t="fire">Střílej</button>
     <button class="tbtn race-only" data-t="drift">Drift</button>
   </div>
-  <div class="grp">
+  <!-- kids' mode: one wide pad, steer by sliding a finger left or right -->
+  <div class="tpad kid-only" id="tpad" aria-label="Zatáčení tažením prstu">
+    <svg class="tpad__hint" viewBox="0 0 120 30"><path d="M14 5 3 15l11 10M106 5l11 10-11 10M3 15h114" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <i class="tpad__knob" id="tpadKnob"></i>
+  </div>
+  <div class="grp race-only">
     <button class="tbtn" data-t="left" aria-label="Doleva"><svg viewBox="0 0 30 30"><path d="M19 5 8 15l11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <button class="tbtn" data-t="right" aria-label="Doprava"><svg viewBox="0 0 30 30"><path d="m11 5 11 10-11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
   </div>

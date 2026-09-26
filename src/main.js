@@ -83,7 +83,7 @@ function syncKart(k, dt) {
 
 /* ================= Input ================= */
 const keys = new Set();
-const touch = { left: false, right: false, drift: false };
+const touch = { left: false, right: false, drift: false, pad: 0 };
 let firePressed = false, padFirePrev = false;
 const isTouch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
 if (isTouch) document.body.classList.add('is-touch');
@@ -110,6 +110,32 @@ document.querySelectorAll('.tbtn').forEach((b) => {
   b.addEventListener('pointerleave', off);
 });
 
+// Kids' touch pad: the finger's first touch is the centre, sliding it sideways steers, the further the harder
+{
+  const pad = $('#tpad'), knob = $('#tpadKnob'), REACH = 60;
+  let id = null, x0 = 0, knobX = 0;
+  const move = (e) => {
+    const dx = clamp(e.clientX - x0, -REACH, REACH);
+    touch.pad = Math.abs(dx) < 6 ? 0 : dx / REACH;
+    knob.style.transform = `translateX(${knobX + dx}px)`;
+  };
+  pad.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (id !== null) return;
+    id = e.pointerId; x0 = e.clientX; pad.setPointerCapture(id);
+    const r = pad.getBoundingClientRect();
+    knobX = e.clientX - (r.left + r.width / 2);
+    pad.classList.add('on'); move(e);
+  });
+  pad.addEventListener('pointermove', (e) => { if (e.pointerId === id) move(e); });
+  const end = (e) => {
+    if (e.pointerId !== id) return;
+    id = null; touch.pad = 0; pad.classList.remove('on');
+  };
+  pad.addEventListener('pointerup', end);
+  pad.addEventListener('pointercancel', end);
+}
+
 function readPad() {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   for (const p of pads) if (p && p.connected) return p;
@@ -122,7 +148,7 @@ function playerInput() {
   let brake = has('ArrowDown', 'KeyS');
   let drift = has('ShiftLeft', 'ShiftRight');
   if (isTouch) {
-    steer += (touch.right ? 1 : 0) - (touch.left ? 1 : 0);
+    steer += (touch.right ? 1 : 0) - (touch.left ? 1 : 0) + touch.pad;
     // on a touch screen the kart always goes full throttle
     throttle = true;
     drift = drift || touch.drift;

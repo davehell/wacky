@@ -195,6 +195,19 @@ body.is-kid .race-only, body:not(.is-kid) .kid-only { display: none; }
 .tbtn.on { background: rgba(255, 201, 60, 0.85); color: var(--ink); }
 .tbtn svg { width: 30px; height: 30px; }
 body.is-touch .hud__br { bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
+.tpad {
+  position: relative; width: min(340px, 48vw); height: 120px; border-radius: 60px; pointer-events: auto; touch-action: none;
+  background: rgba(20, 33, 61, 0.35); border: 3px solid #fff; box-sizing: border-box; color: rgba(255, 255, 255, 0.7);
+  display: grid; place-items: center; overflow: hidden;
+}
+.tpad__hint { width: 70%; height: 30px; }
+.tpad__knob {
+  position: absolute; left: 50%; top: 50%; width: 84px; height: 84px; margin: -42px 0 0 -42px; border-radius: 50%;
+  background: rgba(255, 201, 60, 0.9); border: 3px solid #fff; box-shadow: 0 3px 0 rgba(20, 33, 61, 0.4);
+  opacity: 0; transition: opacity 0.15s;
+}
+.tpad.on .tpad__knob { opacity: 1; }
+body.is-touch.is-kid .hud__br { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
 
 @media (max-width: 640px) {
   .panel { left: 16px; right: 16px; top: 16px; bottom: 16px; width: auto; padding: 22px 18px; }
@@ -206,6 +219,7 @@ body.is-touch .hud__br { bottom: calc(110px + env(safe-area-inset-bottom, 0px));
   .slot svg { width: 46px; height: 46px; }
   .touch .tbtn { width: 60px; height: 60px; }
   body.is-kid .touch .tbtn { width: 84px; height: 84px; }
+  .tpad { height: 100px; }
   .bolt { width: 72px; height: 72px; }
   .ammo { width: 72px; height: 72px; border-radius: 18px; }
   .ammo svg, .ammo img { width: 50px; height: 50px; }
