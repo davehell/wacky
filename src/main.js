@@ -18,8 +18,8 @@ const CC = [
   { base: 30, ai: 0.9, label: '50 cc', in: 'v 50 cc' },
   { base: 36, ai: 0.96, label: '100 cc', in: 've 100 cc' },
   { base: 43, ai: 1.0, label: '150 cc', in: 've 150 cc' },
-  // kids' mode: automatic throttle, gentle steering, slow and forgiving opponents
-  { base: 28, ai: 0.92, label: 'Dětský režim', in: 'v dětském režimu' },
+  // kids' mode: automatic throttle, gentle steering; opponents keep close so there is still a race to win
+  { base: 28, ai: 0.98, label: 'Dětský režim', in: 'v dětském režimu' },
 ];
 let ccIdx = 1, selected = 0, kid = store.get('dk-kid') === '1';
 const cls = () => (kid ? 3 : ccIdx);
@@ -46,7 +46,7 @@ function resetKart(k, slot) {
   });
   // a touch slower than the player at the top speed, each with its own comfortable gap
   k.ai.skill = CC[cls()].ai * rnd(0.93, 0.97);
-  k.ai.slack = 12 + slot * 6;
+  k.ai.slack = kid ? 5 + slot * 3 : 12 + slot * 6;
   k.ai.surgeF = rnd(0.2, 0.32); k.ai.surgeP = rnd(0, 6.28);
   k.ai.itemT = 0;
   k.ai.hogT = rnd(8, 12);
@@ -265,11 +265,12 @@ function paceMul(k) {
   if (player.finished) return k.ai.skill;
   // kids' mode: the steady auto-throttle would keep everyone just behind, so each opponent has
   // slow waves of pace that now and then carry it past the player and then drop it back again
-  const skill = k.ai.skill + (kid ? Math.sin(raceTime * k.ai.surgeF + k.ai.surgeP) * 0.08 : 0);
-  // behind the player: easy-going at first so a lead is possible, then pressing harder and harder
-  if (gap > 0) return skill + clamp((gap - k.ai.slack) / 90, 0, 0.45);
-  // ahead of the player: wait up
-  return skill - clamp((-gap - 12) / 120, 0, 0.5);
+  const skill = k.ai.skill + (kid ? Math.sin(raceTime * k.ai.surgeF + k.ai.surgeP) * 0.15 : 0);
+  // behind the player: easy-going at first so a lead is possible, then pressing harder and harder;
+  // in kids' mode the catch-up bites sooner so a small lapse in driving invites a real overtake
+  if (gap > 0) return skill + clamp((gap - k.ai.slack) / (kid ? 55 : 90), 0, 0.45);
+  // ahead of the player: wait up, but in kids' mode only a little, so taking the lead back is a real race
+  return skill - clamp((-gap - 12) / (kid ? 160 : 120), 0, kid ? 0.25 : 0.5);
 }
 
 // Kids' mode: a kart that wanders far off the road, or turns round the wrong way, is put back

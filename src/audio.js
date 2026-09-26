@@ -4,8 +4,9 @@ import { W } from './track.js';
 /* ================= Audio ================= */
 let AC = null, master = null, sfxBus = null, noiseBuf = null, pulse = null, eng = null, muted = store.get('dk-muted') === '1';
 const opp = [];
-// The player's own engine drowned out everything else, so it is silent for now; raise to bring it back
-const PLAYER_ENGINE_VOL = 0;
+// Quiet enough to stay under the other karts' engines when they are close, but audible on its own
+// so the player is never driving in total silence when out in front alone
+const PLAYER_ENGINE_VOL = 0.4;
 // Gear boundaries as fractions of the class's top speed. The top gears sit around cruising speed, so
 // bends, bumps and turbos keep the gearbox busy for the whole race instead of only at the start.
 const GEAR_F = [0, 0.14, 0.3, 0.46, 0.62, 0.78, 0.94, 1.1, 1.45];
