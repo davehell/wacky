@@ -56,7 +56,7 @@ function initAudio() {
     const v = voice(800);
     v.gain.connect(master);
     eng = Object.assign(v, {
-      w: 0, gear: 1, shiftT: 0, vs: 0, blipT: 0, load: 0,
+      w: 0, gear: 1, shiftT: 0, vs: 0, blipT: 0, load: 0, jetT: 0,
       skid: loopNoise('bandpass', 1500, 3), rumble: loopNoise('lowpass', 420, 0.7), jet: loopNoise('bandpass', 1500, 1.4),
     });
 
@@ -185,6 +185,11 @@ function setEngine(k, throttle, dt, rev = null) {
   eng.skid.g.gain.setTargetAtTime(k.drifting ? 0.04 : 0, t, 0.05);
   eng.skid.f.frequency.setTargetAtTime(1300 + v * 12 + Math.sin(t * 9) * 150, t, 0.05);
   eng.rumble.g.gain.setTargetAtTime(off ? clamp(v / 20, 0, 1) * 0.12 : 0, t, 0.08);
+  // turbo: an airy whoosh that sweeps up as it kicks in and lasts as long as the boost
+  eng.jetT = k.boost > 0 ? eng.jetT + dt : 0;
+  const jet = k.boost > 0 ? Math.min(1, k.boost / 0.3) : 0;
+  eng.jet.g.gain.setTargetAtTime(jet * 0.1, t, jet ? 0.03 : 0.2);
+  eng.jet.f.frequency.setTargetAtTime(900 + 1500 * Math.min(1, eng.jetT / 0.35) + v * 15 + Math.sin(t * 11) * 120, t, 0.05);
 }
 // heading: camera yaw, used to pan opponents left or right
 function updateOpponents(listener, others, heading) {
@@ -208,7 +213,7 @@ function updateOpponents(listener, others, heading) {
 function silenceEngine(fade = 0.05) {
   if (!eng) return;
   const t = AC.currentTime;
-  for (const n of [eng.gain, eng.skid.g, eng.rumble.g, ...opp.map((o) => o.gain)]) n.gain.setTargetAtTime(0, t, fade);
+  for (const n of [eng.gain, eng.skid.g, eng.rumble.g, eng.jet.g, ...opp.map((o) => o.gain)]) n.gain.setTargetAtTime(0, t, fade);
 }
 function drawMuteIcon() {
   $('#muteIcon').innerHTML = '<path d="M3 7h3l5-4v14l-5-4H3z" fill="currentColor"/>' +
