@@ -453,7 +453,7 @@ function collectHedgehogs(karts, onPick) {
   for (const sp of spots) {
     if (!sp.here) continue;
     for (const k of karts) {
-      if (k.hogs >= MAX_HOGS || k.y > 1.5) continue;
+      if (k.hogs >= (k.maxHogs ?? MAX_HOGS) || k.y > 1.5) continue;
       if ((k.x - sp.x) ** 2 + (k.z - sp.z) ** 2 < PICK_R * PICK_R) {
         sp.here = false; sp.c.root.visible = false; sp.respawn = rnd(6, 9);
         onPick(k, sp);

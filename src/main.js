@@ -9,6 +9,8 @@ import { parts, emit, updateParticles, burst } from './particles.js';
 import { initAudio, sfx, setEngine, updateOpponents, silenceEngine, toggleMute } from './audio.js';
 
 /* ================= Game state ================= */
+// Opponents carry only a few hedgehogs and take turns at the player, so a leader is never pelted non-stop
+const AI_MAX_HOGS = 2, AI_SHOT_GAP = 4.5, SAFE_AFTER_HIT = 2.2;
 const CC = [
   { base: 30, ai: 0.9, label: '50 cc', in: 'v 50 cc' },
   { base: 36, ai: 0.96, label: '100 cc', in: 've 100 cc' },
@@ -19,7 +21,7 @@ const CC = [
 let ccIdx = 1, selected = 0, kid = store.get('dk-kid') === '1';
 const cls = () => (kid ? 3 : ccIdx);
 let state = 'menu', paused = false, raceTime = 0, cdT = 0, cdShown = null, finishCount = 0, doneT = 0, gTime = 0;
-let player = null, launchAt = null;
+let player = null, launchAt = null, aiShotT = 0;
 const projectiles = [], hazards = [];
 
 const karts = CHARS.map((ch) => {
@@ -37,13 +39,13 @@ function resetKart(k, slot) {
     x: P[i].x + S[i].x * lat, z: P[i].z + S[i].z * lat, y: 0, hopV: 0,
     h: headingAt(i), speed: 0, vx: 0, vz: 0, st: 0,
     drifting: false, driftDir: 0, driftCharge: 0, boost: 0, spin: 0, spinDir: 1,
-    item: null, pending: null, rollT: 0, hogs: 1, hogCd: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
+    item: null, pending: null, rollT: 0, hogs: 0, maxHogs: AI_MAX_HOGS, hogCd: 0, safe: 0, finished: false, finishTime: 0, place: 0, mul: 1, wrongT: 0,
   });
   // a touch slower than the player at the top speed, each with its own comfortable gap
   k.ai.skill = CC[cls()].ai * rnd(0.93, 0.97);
   k.ai.slack = 12 + slot * 6;
   k.ai.itemT = 0;
-  k.ai.hogT = rnd(4, 8);
+  k.ai.hogT = rnd(8, 12);
   k.kid = false;
   syncKart(k, 0);
 }
@@ -52,7 +54,7 @@ function placeGrid() {
   order.splice(4, 0, karts.find((k) => k.ch === CHARS[selected]));
   order.forEach((k, slot) => resetKart(k, slot));
   player = karts.find((k) => k.ch === CHARS[selected]);
-  player.hogs = 3;
+  player.maxHogs = MAX_HOGS;
   player.kid = kid;
   karts.forEach((k) => (k.isPlayer = k === player));
 }
@@ -65,6 +67,8 @@ function syncKart(k, dt) {
   v.body.rotation.z += ((k.drifting ? k.driftDir : k.st) * 0.07 * sf - v.body.rotation.z) * Math.min(1, dt * 8);
   v.head.rotation.z = k.st * 0.18;
   v.head.rotation.y = -k.st * 0.25;
+  // blinking while protected after a hit
+  v.root.visible = !(k.safe > 0 && k.spin <= 0 && Math.floor(k.safe * 10) % 2);
   for (const w of v.wheels) w.rotation.x += (k.speed * dt) / 0.48;
   for (const p of v.pivots) p.rotation.y = -k.st * 0.45;
 }
@@ -223,8 +227,9 @@ function paceMul(k) {
 }
 
 function hitKart(k, by) {
-  if (k.spin > 0) return;
+  if (k.spin > 0 || k.safe > 0) return;
   k.spin = 1.1; k.spinDir = Math.random() < 0.5 ? -1 : 1; k.drifting = false; k.boost = 0;
+  if (k.isPlayer) k.safe = k.spin + SAFE_AFTER_HIT;
   burst(k.x, 1.2, k.z, 26, 1, 0.85, 0.2);
   if (k.isPlayer) { showMsg('Au!'); sfx.hit(); }
   else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.hit(); }
@@ -281,10 +286,17 @@ function aiInput(k, dt) {
   const bend = Math.acos(clamp(T[k.idx].x * T[ahead].x + T[k.idx].z * T[ahead].z, -1, 1));
   if (bend > 0.85 && k.speed > CC[cls()].base * 0.78) inp.throttle = false;
   if (Math.abs(diff) > 0.9 && k.speed > 12) inp.brake = true;
+  // the player is a target only when nobody else has had a go at them just now
+  const fair = (tg) => tg && (!tg.isPlayer || (aiShotT <= 0 && tg.safe <= 0));
+  const shotAt = (tg) => { if (tg.isPlayer) aiShotT = kid ? AI_SHOT_GAP * 1.8 : AI_SHOT_GAP; };
   if (k.item) {
     a.itemT -= dt;
     if (a.itemT <= 0) {
-      if (k.item === 'fire') { const tg = targetAhead(k); if ((tg && tg.prog - k.prog < 55) || a.itemT < -8) useItem(k); }
+      if (k.item === 'fire') {
+        const tg = targetAhead(k);
+        if (fair(tg) && tg.prog - k.prog < 55) { useItem(k); shotAt(tg); }
+        else if (a.itemT < -8 && !(tg && tg.isPlayer)) useItem(k);
+      }
       else if (k.item === 'turbo') { if (bend < 0.3) useItem(k); }
       else useItem(k);
     }
@@ -292,7 +304,7 @@ function aiInput(k, dt) {
   a.hogT -= dt;
   if (k.hogs > 0 && a.hogT <= 0) {
     const tg = targetAhead(k);
-    if (tg && tg.prog - k.prog < 60) { throwHog(k); a.hogT = kid ? rnd(6, 10) : rnd(2.5, 5); }
+    if (fair(tg) && tg.prog - k.prog < 60) { throwHog(k); shotAt(tg); a.hogT = kid ? rnd(9, 14) : rnd(5, 9); }
   }
   return inp;
 }
@@ -422,7 +434,7 @@ function startRace() {
   for (const b of boxes) { b.respawn = 0; b.m.visible = true; }
   resetHedgehogs();
   for (const q of parts) q.life = 0;
-  finishCount = 0; raceTime = 0; cdT = 3.6; cdShown = null; launchAt = null; doneT = 0;
+  finishCount = 0; raceTime = 0; aiShotT = 0; cdT = 3.6; cdShown = null; launchAt = null; doneT = 0;
   state = 'countdown'; paused = false;
   camH = player.h;
   lastHud = {}; lastSlot = '-'; lastHogs = -1;
@@ -501,6 +513,7 @@ function simulate(dt) {
   }
   if (state !== 'race' && state !== 'done') return;
   raceTime += dt;
+  if (aiShotT > 0) aiShotT -= dt;
   for (const k of karts) {
     k.mul = paceMul(k);
     let inp;
@@ -514,6 +527,7 @@ function simulate(dt) {
       }
     } else inp = aiInput(k, dt);
     if (k.hogCd > 0) k.hogCd -= dt;
+    if (k.safe > 0) k.safe -= dt;
     if (k.rollT > 0) { k.rollT -= dt; if (k.rollT <= 0) { k.item = k.pending; k.pending = null; } }
     const lapBefore = k.lap;
     stepKart(k, inp, dt);
