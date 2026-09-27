@@ -379,11 +379,11 @@ function hitKart(k, by, kind) {
   if (!k.isPlayer) react(k, 'ouch');
   if (by && by !== k) react(by, 'cheer');
   if (k.isPlayer) {
-    showMsg('Au!'); sfx.hit(); sfx.hitBy(kind); sfx.dizzy();
+    showMsg('Au!'); sfx.hit(); sfx.hitBy(kind);
     // the whole picture wobbles and a tablet gives a little buzz
     camHit = 1;
     if (navigator.vibrate) navigator.vibrate([70, 50, 90]);
-  } else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); sfx.dizzy(0.5); }
+  } else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); }
 }
 
 function popBubble(k) {
@@ -500,12 +500,15 @@ function aiInput(k, dt) {
 }
 
 /* ================= HUD ================= */
+let hogPic = '';
+const fireBtn = $('.tbtn--fire'), fireIcon = $('#fireIcon');
 const el = { hogs: $('#hogs'), ammo: $('#ammo'), pos: $('#pos'), lap: $('#lap'), slot: $('#slot'), slotLabel: $('#slotLabel'), msg: $('#msg'), cd: $('#cd'), drift: $('#drift'), bolts: [1, 2].map((n) => $('#bolt' + n)) };
 const fmt = (t) => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(2).padStart(5, '0')}`; };
 let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1, lastDrift = 0;
 {
   const pic = hedgehogPicture();
-  $('#hogIcon').innerHTML = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
+  hogPic = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
+  $('#hogIcon').innerHTML = hogPic;
 }
 function showMsg(t, dur = 1.3) { el.msg.textContent = t; el.msg.classList.remove('pop'); void el.msg.offsetWidth; el.msg.classList.add('pop'); el.msg.hidden = false; msgTimer = dur; }
 const itemPop = $('#itemPop'), flag = $('#flag');
@@ -544,8 +547,13 @@ function updateHud(dt) {
     el.slot.innerHTML = slot ? ICONS[slot] : '';
     el.slotLabel.textContent = slot ? ITEM_NAMES[slot] : 'Prázdné';
     if (slot) { el.slot.classList.remove('pop'); void el.slot.offsetWidth; el.slot.classList.add('pop'); showItemPop(slot); }
+    // the fire button shows what it shoots: the item, or else a hedgehog
+    fireIcon.innerHTML = slot ? ICONS[slot] : hogPic;
+    fireBtn.classList.toggle('has-item', !!slot);
+    fireIcon.classList.remove('pop'); void fireIcon.offsetWidth; fireIcon.classList.add('pop');
     lastSlot = slot;
   }
+  fireBtn.classList.toggle('empty', !slot && player.hogs === 0);
   const ch = player.drifting ? player.driftCharge : 0;
   el.drift.classList.toggle('on', player.drifting);
   const fills = [ch / DRIFT_MINI, (ch - DRIFT_MINI) / (DRIFT_BIG - DRIFT_MINI)];
@@ -698,11 +706,12 @@ function showBest() {
   $('#best').textContent = t.charAt(0).toUpperCase() + t.slice(1);
 }
 
-// which version this is, so a parent can tell whether the tablet already has the latest one
+// when the game was last changed and the commit id, so a parent can tell whether the tablet has the latest one
 {
-  const [date, id] = (import.meta.env.APP_COMMIT || '').split(' ');
-  const when = date ? date.split('-').map(Number).reverse().join('. ') : '';
-  $('#version').textContent = ['Verze ' + import.meta.env.APP_VERSION, when, id].filter(Boolean).join(' · ');
+  const [iso, id] = (import.meta.env.APP_COMMIT || '').split(' ');
+  const d = iso ? new Date(iso) : null;
+  const when = d ? `${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}` : '';
+  $('#version').textContent = [when, id].filter(Boolean).join(' · ');
 }
 function show(id, on) { $(id).hidden = !on; }
 function clearField() {
