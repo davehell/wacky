@@ -765,12 +765,12 @@ $('#startBtn').addEventListener('click', start);
 $('#resumeBtn').addEventListener('click', togglePause);
 $('#restartBtn').addEventListener('click', startRace);
 $('#quitBtn').addEventListener('click', toMenu);
-$('#againBtn').addEventListener('click', () => {
-  if (!cup) startRace();
-  else if (cup.round < TRACKS.length - 1) nextRound();
-  else start();
+// one button after the finish: back to the menu, which remembers everything, so the next race is one tap
+// away; only in the middle of a cup it goes on to the next race instead
+$('#resBtn').addEventListener('click', () => {
+  if (cup && cup.round < TRACKS.length - 1) nextRound();
+  else toMenu();
 });
-$('#menuBtn').addEventListener('click', toMenu);
 $('#pauseBtn').addEventListener('click', togglePause);
 $('#muteBtn').addEventListener('click', toggleMute);
 $('#musicBtn').addEventListener('click', () => { initAudio(); toggleMusic(); if (state === 'menu') playSong('menu'); });
@@ -791,8 +791,7 @@ function showResults() {
   const tr = currentTrack();
   $('#resTitle').textContent = `${place}. místo`;
   $('#resEyebrow').textContent = place === 1 ? `Vítězství · ${tr.name}` : `Cíl · ${tr.name} · ${c.label}`;
-  $('#againBtn').textContent = 'Jet znovu';
-  $('#menuBtn').textContent = 'Změnit jezdce';
+  $('#resBtn').textContent = 'Menu';
   if (cup) {
     rows.forEach((r, i) => { cup.pts.set(r.k, cup.pts.get(r.k) + CUP_POINTS[i]); cup.last.set(r.k, i); });
     // standings: most points first, a tie goes to whoever did better in this race
@@ -806,8 +805,7 @@ function showResults() {
       $('#resTitle').textContent = ['Zlatý pohár!', 'Stříbrný pohár!', 'Bronzový pohár!'][cupPlace - 1] || `${cupPlace}. místo v poháru`;
       $('#resEyebrow').textContent = `Konec poháru · v posledním závodě ${place}. místo`;
     }
-    $('#againBtn').textContent = final ? 'Nový pohár' : 'Další závod';
-    $('#menuBtn').textContent = 'Do menu';
+    if (!final) $('#resBtn').textContent = 'Další závod';
   } else {
     $('#resHead').innerHTML = '';
     $('#resBody').innerHTML = rows.map((r, i) =>
@@ -826,7 +824,7 @@ function showResults() {
   sfx.cheer(order.indexOf(player) < 3);
   playSong('podium');
   show('#results', true);
-  $('#againBtn').focus();
+  $('#resBtn').focus();
 }
 
 function resize() {
