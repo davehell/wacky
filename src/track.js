@@ -173,7 +173,7 @@ const dirtTex = canvasTex(128, 128, (g, w, h) => {
   for (let i = 0; i < 900; i++) { const v = Math.random(); g.fillStyle = v < 0.5 ? 'rgba(120,84,50,0.6)' : 'rgba(190,150,105,0.6)'; g.fillRect(Math.random() * w, Math.random() * h, 3, 3); }
   g.fillStyle = 'rgba(95,64,38,0.55)'; g.fillRect(w * 0.26, 0, 12, h); g.fillRect(w * 0.66, 0, 12, h);
 }, true);
-const dirtMat = new THREE.MeshStandardMaterial({ map: dirtTex, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+const dirtMat = new THREE.MeshStandardMaterial({ map: dirtTex, roughness: 1, side: THREE.DoubleSide });
 const checkTex = canvasTex(160, 32, (g) => { for (let x = 0; x < 20; x++) for (let y = 0; y < 4; y++) { g.fillStyle = (x + y) % 2 ? '#111' : '#fff'; g.fillRect(x * 8, y * 8, 8, 8); } });
 checkTex.magFilter = THREE.NearestFilter;
 const bannerTex = canvasTex(1024, 128, (c, w, h) => {
@@ -241,8 +241,10 @@ function buildShortcut() {
     const q = cutPts[Math.min(k + 1, n)], o = cutPts[Math.max(k - 1, 0)], t = q.clone().sub(o).normalize();
     return new THREE.Vector3(t.z, 0, -t.x);
   });
-  // just under the road, so where the two overlap at the ends the road stays on top
-  ribbonFrom(cutPts, sides, -CUT_W, CUT_W, 0.025, 14, dirtMat, false);
+  // above the ground but under the verge and the road, so where they overlap at the ends the road stays on
+  // top. Only the height decides: a polygon offset made the ground win at a flat view, and the dirt then
+  // popped up in pieces while driving along it
+  ribbonFrom(cutPts, sides, -CUT_W, CUT_W, 0.012, 14, dirtMat, false);
   // hay bales along both edges, off the road
   const bale = new THREE.CylinderGeometry(0.8, 0.8, 1.6, 12).rotateZ(Math.PI / 2), baleM = std(0xe6c35c, { roughness: 0.95 });
   for (let k = 0; k <= n; k += 2) {
@@ -398,7 +400,8 @@ function buildTrack(tr) {
     for (let i = 0; i < 9000; i++) { g.fillStyle = th.ground[1][i % 5]; g.fillRect(Math.random() * w, Math.random() * h, 1 + Math.random() * 2, 2 + Math.random() * 4); }
   }, true);
   grassTex.repeat.set(160, 160);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(3200, 3200), new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.95 }));
+  // pushed back in depth, so everything lying flat on it wins at any distance and angle
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(3200, 3200), new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 }));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   add(ground);
