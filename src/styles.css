@@ -223,13 +223,14 @@ body.is-kid .pad { --b: 136px; }
 .tbtn {
   width: 74px; height: 74px; border-radius: 50%; border: 3px solid #fff; background: rgba(20, 33, 61, 0.45); color: #fff;
   font: 800 12px var(--body); letter-spacing: 0.06em; text-transform: uppercase; display: grid; place-items: center;
-  touch-action: none; -webkit-tap-highlight-color: transparent;
+  touch-action: none; -webkit-tap-highlight-color: transparent; transition: transform 0.06s, background 0.06s;
 }
 .pad .tbtn { width: var(--b); height: var(--b); }
 .pad .tbtn svg { width: 40%; height: 40%; }
 .tbtn--drift { position: absolute; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); pointer-events: auto; }
 body.is-kid .race-only, body:not(.is-kid) .kid-only { display: none; }
-.tbtn.on { background: rgba(255, 201, 60, 0.85); color: var(--ink); }
+/* pressed: only a touch darker and a little pushed in, nothing that pulls the eye off the road */
+.tbtn.on { background: rgba(20, 33, 61, 0.62); transform: scale(0.95); }
 .tbtn svg { width: 30px; height: 30px; }
 /* the shoot button: as wide as the two arrows below it, a glossy red pill with a fireball on it */
 .pad .tbtn--fire {
