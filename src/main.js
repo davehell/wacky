@@ -209,7 +209,7 @@ function stepKart(k, inp, dt) {
   if (k.drifting && (!inp.drift || k.speed < 8)) {
     if (k.driftCharge > DRIFT_BIG) k.boost = Math.max(k.boost, 1.2);
     else if (k.driftCharge > DRIFT_MINI) k.boost = Math.max(k.boost, 0.65);
-    if (k.isPlayer && k.driftCharge > DRIFT_MINI) { sfx.boost(); showMsg(k.driftCharge > DRIFT_BIG ? 'Super turbo!' : 'Turbo!', 0.8); }
+    if (k.isPlayer && k.driftCharge > DRIFT_MINI) { sfx.boost(); }
     k.drifting = false;
   }
   const sf = clamp(Math.abs(k.speed) / 7, 0, 1) * (k.speed < 0 ? -1 : 1);
@@ -283,7 +283,7 @@ function stepKart(k, inp, dt) {
 
 function takeOff(k) {
   k.hopV = clamp(k.speed * 0.3, 5, 13); k.air = true; k.drifting = false;
-  if (k.isPlayer) { showMsg('Hop!', 0.8); sfx.jump(); }
+  if (k.isPlayer) sfx.jump();
 }
 // touching down after a jump: a puff of dust, a little bounce and a short turbo as a reward
 function land(k) {
@@ -329,7 +329,7 @@ function rescueKid(k, dt) {
     speed: Math.max(k.speed, 14) * 0.6, y: 0.8, hopV: 3, drifting: false, lostT: 0, wrongT: 0, safe: 1.5, pushX: 0, pushZ: 0,
   });
   k.vx = Math.sin(k.h) * k.speed; k.vz = Math.cos(k.h) * k.speed;
-  if (k.isPlayer) { camH = k.h; showMsg('Zpátky na trať!', 1); sfx.pickup(); }
+  if (k.isPlayer) { camH = k.h; sfx.pickup(); }
   burst(k.x, 1.2, k.z, 24, 1, 1, 1);
 }
 
@@ -371,7 +371,7 @@ function react(k, kind) {
 }
 function hitKart(k, by, kind) {
   if (k.spin > 0 || k.safe > 0) return;
-  if (k.bubble > 0) { popBubble(k); if (k.isPlayer) showMsg('Bublina tě ochránila!', 1.1); return; }
+  if (k.bubble > 0) { popBubble(k); return; }
   k.spin = 1.1; k.spinDir = Math.random() < 0.5 ? -1 : 1; k.drifting = false; k.boost = 0; k.shake = 1;
   if (k.isPlayer) k.safe = k.spin + SAFE_AFTER_HIT;
   burst(k.x, 1.2, k.z, 26, 1, 0.85, 0.2);
@@ -379,11 +379,11 @@ function hitKart(k, by, kind) {
   if (!k.isPlayer) react(k, 'ouch');
   if (by && by !== k) react(by, 'cheer');
   if (k.isPlayer) {
-    showMsg('Au!'); sfx.hit(); sfx.hitBy(kind);
+    sfx.hit(); sfx.hitBy(kind);
     // the whole picture wobbles and a tablet gives a little buzz
     camHit = 1;
     if (navigator.vibrate) navigator.vibrate([70, 50, 90]);
-  } else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); }
+  } else if (by && by.isPlayer) sfx.score();
 }
 
 function popBubble(k) {
@@ -502,15 +502,14 @@ function aiInput(k, dt) {
 /* ================= HUD ================= */
 let hogPic = '';
 const fireBtn = $('.tbtn--fire'), fireIcon = $('#fireIcon'), fireCount = $('#fireCount');
-const el = { hogs: $('#hogs'), ammo: $('#ammo'), pos: $('#pos'), lap: $('#lap'), slot: $('#slot'), slotLabel: $('#slotLabel'), msg: $('#msg'), cd: $('#cd'), drift: $('#drift'), bolts: [1, 2].map((n) => $('#bolt' + n)) };
+const el = { hogs: $('#hogs'), ammo: $('#ammo'), pos: $('#pos'), lap: $('#lap'), slot: $('#slot'), slotLabel: $('#slotLabel'), cd: $('#cd'), drift: $('#drift'), bolts: [1, 2].map((n) => $('#bolt' + n)) };
 const fmt = (t) => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(2).padStart(5, '0')}`; };
-let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1, lastDrift = 0;
+let lastSlot = '', lastHud = {}, lastHogs = -1, lastDrift = 0;
 {
   const pic = hedgehogPicture();
   hogPic = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
   $('#hogIcon').innerHTML = hogPic;
 }
-function showMsg(t, dur = 1.3) { el.msg.textContent = t; el.msg.classList.remove('pop'); void el.msg.offsetWidth; el.msg.classList.add('pop'); el.msg.hidden = false; msgTimer = dur; }
 const itemPop = $('#itemPop'), flag = $('#flag');
 let flagTimer = 0;
 // the last lap: children cannot read yet, so a waving chequered flag says it instead of words
@@ -523,7 +522,6 @@ function waveFlag() {
 let itemPopTimer = 0;
 function showItemPop(it) {
   $('#itemPopIcon').innerHTML = ICONS[it];
-  $('#itemPopName').textContent = ITEM_NAMES[it] + '!';
   itemPop.hidden = true; void itemPop.offsetWidth; itemPop.hidden = false;
   clearTimeout(itemPopTimer);
   itemPopTimer = setTimeout(() => { itemPop.hidden = true; }, 1400);
@@ -531,7 +529,7 @@ function showItemPop(it) {
 function setText(key, node, v) { if (lastHud[key] !== v) { node.textContent = v; lastHud[key] = v; } }
 const ranked = () => karts.slice().sort((a, b) => (b.finished ? 1e9 - b.finishTime : b.prog) - (a.finished ? 1e9 - a.finishTime : a.prog));
 
-function updateHud(dt) {
+function updateHud() {
   const rank = ranked().indexOf(player) + 1;
   setText('pos', el.pos, player.finished ? `${player.place}.` : `${rank}.`);
   setText('lap', el.lap, `${clamp(player.lap + 1, 1, LAPS)}/${LAPS}`);
@@ -567,7 +565,6 @@ function updateHud(dt) {
     if (level > lastDrift) sfx.charge(level);
     lastDrift = level;
   }
-  if (msgTimer > 0) { msgTimer -= dt; if (msgTimer <= 0) el.msg.hidden = true; }
   drawMini();
 }
 
@@ -735,7 +732,7 @@ function startRace() {
   state = 'countdown'; paused = false;
   camH = player.h; camHit = 0;
   lastHud = {}; lastSlot = '-'; lastHogs = -1; lastDrift = 0;
-  el.msg.hidden = true; el.cd.hidden = true; itemPop.hidden = true; flag.hidden = true;
+  el.cd.hidden = true; itemPop.hidden = true; flag.hidden = true;
   show('#menu', false); show('#results', false); show('#pause', false); show('#hud', true); show('#touch', isTouch);
   requestAnimationFrame(setupMini);
 }
@@ -853,10 +850,10 @@ function simulate(dt) {
     const n = Math.ceil(cdT);
     if (cdT > 0 && n <= 3 && n !== cdShown) { cdShown = n; el.cd.textContent = n; el.cd.hidden = false; el.cd.classList.remove('pop'); void el.cd.offsetWidth; el.cd.classList.add('pop'); sfx.beep(); }
     if (cdT <= 0) {
+      // no words during the race, the start sound says go
       state = 'race'; sfx.go();
-      el.cd.textContent = 'Jeď!'; el.cd.classList.remove('pop'); void el.cd.offsetWidth; el.cd.classList.add('pop');
-      setTimeout(() => { el.cd.hidden = true; }, 800);
-      if (launchAt !== null && launchAt < 0.75) { player.boost = 1.2; showMsg('Raketový start!'); sfx.boost(); }
+      el.cd.hidden = true;
+      if (launchAt !== null && launchAt < 0.75) { player.boost = 1.2; sfx.boost(); }
     }
     setEngine(player, pi.throttle, dt, pi.throttle ? 0.72 + Math.sin(gTime * 6) * 0.1 : 0.1);
     return;
@@ -873,7 +870,6 @@ function simulate(dt) {
       if (firePressed) {
         if (k.item) useItem(k);
         else if (k.hogs > 0) throwHog(k);
-        else if (msgTimer <= 0) showMsg('Žádní ježci!', 0.8);
       }
     } else inp = aiInput(k, dt);
     if (k.hogCd > 0) k.hogCd -= dt;
@@ -889,13 +885,12 @@ function simulate(dt) {
     if (k.isPlayer && k.lap > lapBefore && k.lap === LAPS - 1) waveFlag();
     if (!k.finished && k.lap >= LAPS) {
       k.finished = true; k.finishTime = raceTime; k.place = ++finishCount;
-      if (k.isPlayer) { state = 'done'; doneT = 3.2; showMsg(k.place === 1 ? 'Vítězství!' : `Cíl! ${k.place}. místo`, 3); sfx.finish(); silenceEngine(0.4); }
+      if (k.isPlayer) { state = 'done'; doneT = 3.2; sfx.finish(); silenceEngine(0.4); }
     }
     if (k.kid && !k.finished) rescueKid(k, dt);
     if (k.isPlayer && !k.finished) {
       const dot = k.vx * T[k.idx].x + k.vz * T[k.idx].z;
       k.wrongT = dot < -4 ? k.wrongT + dt : 0;
-      if (k.wrongT > 1 && msgTimer <= 0) showMsg('Opačný směr!');
     }
   }
   firePressed = false;
@@ -944,7 +939,7 @@ function simulate(dt) {
   collectHedgehogs(karts, (k, sp) => {
     k.hogs++;
     burst(sp.x, 1, sp.z, 14, 0.75, 0.5, 0.25);
-    if (k.isPlayer) { sfx.hog(); if (k.hogs >= MAX_HOGS) showMsg('Plno ježků!', 0.9); }
+    if (k.isPlayer) sfx.hog();
   });
 
   // flying hedgehogs and fireballs
@@ -1041,10 +1036,10 @@ function simulate(dt) {
       m.rotation.y = Math.atan2(dx, dz);
       if (d < 1.5 && Math.abs(c.y - tg.y - 4.2) < 1.2) {
         if (tg.finished) c.rain = -1;
-        else if (tg.bubble > 0) { popBubble(tg); c.rain = -1; if (tg.isPlayer) showMsg('Bublina tě ochránila!', 1.1); }
+        else if (tg.bubble > 0) { popBubble(tg); c.rain = -1; }
         else {
           c.rain = RAIN_T; tg.rain = RAIN_T;
-          if (tg.isPlayer) { showMsg('Prší!', 1.1); sfx.drizzle(); } else if (c.owner.isPlayer) { showMsg('Ať zmokne!', 1); sfx.score(); }
+          if (tg.isPlayer) sfx.drizzle(); else if (c.owner.isPlayer) sfx.score();
           if (!tg.isPlayer) react(tg, 'oops');
           react(c.owner, 'cheer');
         }
@@ -1124,7 +1119,7 @@ function frameUpdate(dt) {
   sky.position.copy(camera.position);
   sun.position.set(player.x + 70, 140, player.z + 50);
   sun.target.position.set(player.x, 0, player.z);
-  if (state === 'race' || state === 'done' || state === 'countdown') updateHud(dt);
+  if (state === 'race' || state === 'done' || state === 'countdown') updateHud();
 }
 
 let last = performance.now();
