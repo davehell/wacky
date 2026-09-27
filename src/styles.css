@@ -164,7 +164,6 @@ h2 { margin: 4px 0 -6px; font-size: 12px; font-weight: 800; letter-spacing: 0.12
 }
 .char:hover { background: #fff; }
 .char[aria-checked="true"] { background: #fff; border-color: var(--ink); box-shadow: 0 3px 0 var(--ink); }
-.char b { font-size: 13px; line-height: 1.15; text-align: center; }
 .face { width: 78px; height: 78px; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 50% 45%, #ffffff 0 30%, var(--kart) 75%); box-shadow: 0 3px 0 rgba(20, 33, 61, 0.25); }
 .face img { width: 100%; height: 100%; display: block; }
 .tracks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -207,42 +206,54 @@ kbd { font: 700 11px var(--body); background: #fff; border: 1px solid var(--line
 .results td:first-child { font-family: var(--display); font-size: 20px; width: 40px; }
 .results td:last-child { text-align: right; font-weight: 800; }
 .results tr.me td { background: rgba(255, 201, 60, 0.35); }
-.results .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: -1px; }
+.results .face--mini { display: inline-block; width: 40px; height: 40px; vertical-align: middle; box-shadow: none; }
 .results .est { color: var(--ink-soft); font-weight: 600; }
 .results th { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); text-align: left; padding: 0 6px 4px; }
 .results th:last-child { text-align: right; }
 .results .plus { color: #1f9d55; font-weight: 800; text-align: right; width: 48px; }
 
 /* ---------- Touch ---------- */
-/* the fire button and the two arrows under it sit together at the bottom centre, big enough for a
-   child's thumbs; --b is the size of one arrow button, --g the gap between the buttons */
-.touch { position: fixed; inset: auto 0 0 0; padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px)); pointer-events: none; }
-.pad { --b: 104px; --g: 14px; width: max-content; margin: 0 auto; display: grid; gap: var(--g); pointer-events: auto; }
-body.is-kid .pad { --b: 136px; }
-.pad__row { display: flex; gap: var(--g); }
+/* the fire button in the bottom left corner, the two arrows at the bottom centre and the drift button on
+   the right, all big enough for a child's thumbs; --b is the size of one arrow button, --f of the fire
+   button, --g the gap between the buttons */
+.touch {
+  --b: 104px; --f: 140px; --g: 14px;
+  position: fixed; inset: auto 0 0 0; pointer-events: none;
+  padding: 0 calc(16px + env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
+  display: grid; grid-template-columns: minmax(var(--f), 1fr) auto minmax(auto, 1fr); align-items: end; gap: var(--g);
+}
+body.is-kid .touch { --b: 136px; --f: 176px; }
+.pad { display: flex; gap: var(--g); justify-self: center; pointer-events: auto; }
 .tbtn {
   width: 74px; height: 74px; border-radius: 50%; border: 3px solid #fff; background: rgba(20, 33, 61, 0.45); color: #fff;
   font: 800 12px var(--body); letter-spacing: 0.06em; text-transform: uppercase; display: grid; place-items: center;
   touch-action: none; -webkit-tap-highlight-color: transparent; transition: transform 0.06s, background 0.06s;
+  pointer-events: auto;
 }
 .pad .tbtn { width: var(--b); height: var(--b); }
 .pad .tbtn svg { width: 40%; height: 40%; }
-.tbtn--drift { position: absolute; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); pointer-events: auto; }
+.tbtn--drift { grid-column: 3; justify-self: end; }
 body.is-kid .race-only, body:not(.is-kid) .kid-only { display: none; }
 /* pressed: only a touch darker and a little pushed in, nothing that pulls the eye off the road */
 .tbtn.on { background: rgba(20, 33, 61, 0.62); transform: scale(0.95); }
 .tbtn svg { width: 30px; height: 30px; }
-/* the shoot button: as wide as the two arrows below it. With a hedgehog to throw it is as plain as the
-   arrows; with an item from a box it turns into a glossy red pill showing that item */
-.pad .tbtn--fire { width: calc(var(--b) * 2 + var(--g)); height: calc(var(--b) * 0.72); border-radius: 999px; }
-.pad .tbtn--fire.has-item {
-  border: none; background: radial-gradient(ellipse at 34% 28%, #ff6b5f 0%, #ea3323 52%, #c21c1c 100%);
+/* the shoot button: round and bigger than the arrows. With a hedgehog to throw it is as plain as the
+   arrows and shows how many are left; with an item from a box it gets a light face and a thick red rim,
+   so the item stands out. Either picture fills the button */
+.tbtn--fire { position: relative; width: var(--f); height: var(--f); }
+.tbtn--fire.has-item {
+  border: 7px solid #ea3323; background: radial-gradient(ellipse at 34% 28%, #ffffff 0%, #fff4d8 60%, #ffd98a 100%);
   box-shadow: 0 3px 8px rgba(20, 33, 61, 0.4), inset 0 -4px 6px rgba(0, 0, 0, 0.2), inset 0 3px 4px rgba(255, 255, 255, 0.35);
 }
-.pad .tbtn--fire.has-item.on { box-shadow: 0 1px 3px rgba(20, 33, 61, 0.4), inset 0 -2px 4px rgba(0, 0, 0, 0.25), inset 0 2px 3px rgba(255, 255, 255, 0.25); }
-.fire-icon { display: block; height: calc(var(--b) * 0.6); width: calc(var(--b) * 0.6); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
+.tbtn--fire.has-item.on { box-shadow: 0 1px 3px rgba(20, 33, 61, 0.4), inset 0 -2px 4px rgba(0, 0, 0, 0.25), inset 0 2px 3px rgba(255, 255, 255, 0.25); }
+.fire-icon { display: block; width: 80%; height: 80%; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
 .fire-icon svg, .fire-icon img { width: 100%; height: 100%; display: block; object-fit: contain; }
 .fire-icon.pop { animation: bump 0.3s ease-out; }
+.fire-count {
+  position: absolute; right: -4px; top: -4px; min-width: 42px; height: 42px; padding: 0 8px; border-radius: 21px;
+  background: var(--sun); color: var(--ink); border: 3px solid #fff; font: 400 24px/36px var(--display); letter-spacing: 0;
+}
+.tbtn--fire.has-item .fire-count { display: none; }
 /* nothing to throw: the hedgehog fades */
 .tbtn--fire.empty .fire-icon { opacity: 0.35; }
 /* on a touch screen the fire button shows the item, so the card at the top goes; the item that
@@ -254,10 +265,11 @@ body.is-touch .item-pop { animation-name: itemPopDown; }
   14% { transform: translate(-50%, -50%) scale(1.15) rotate(4deg); opacity: 1; }
   24% { transform: translate(-50%, -50%) scale(1); }
   72% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-  100% { transform: translate(-50%, 160%) scale(0.35); opacity: 0; }
+  100% { transform: translate(calc(-50% - 38vw), 180%) scale(0.35); opacity: 0; }
 }
 /* the drift bolts move up out of the way of the pad */
-body.is-touch .drift { bottom: calc(210px + env(safe-area-inset-bottom, 0px)); }
+body.is-touch .drift { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+body.is-touch.is-kid .drift { bottom: calc(180px + env(safe-area-inset-bottom, 0px)); }
 
 /* on narrow screens the map would collide with the numbers at the top, so it drops below them */
 @media (max-width: 720px) {
@@ -275,9 +287,10 @@ body.is-touch .drift { bottom: calc(210px + env(safe-area-inset-bottom, 0px)); }
   .slot { width: 72px; height: 72px; border-radius: 18px; }
   .slot svg { width: 46px; height: 46px; }
   .tbtn--drift { width: 60px; height: 60px; }
-  .pad { --b: 84px; --g: 12px; }
-  body.is-kid .pad { --b: 108px; }
-  body.is-touch .drift { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
+  .touch { --b: 80px; --f: 104px; --g: 8px; }
+  body.is-kid .touch { --b: 96px; --f: 128px; }
+  .fire-count { min-width: 34px; height: 34px; font-size: 19px; line-height: 28px; }
+  body.is-touch .drift, body.is-touch.is-kid .drift { bottom: calc(140px + env(safe-area-inset-bottom, 0px)); }
   .bolt { width: 72px; height: 72px; }
   .ammo { width: 72px; height: 72px; border-radius: 18px; }
   .ammo svg, .ammo img { width: 50px; height: 50px; }

@@ -19,7 +19,7 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
 
 ## Co ve hře je
 
-- šest jezdců — žralok, žirafa, jelen, žabák, zajíček a slonice, každý s jinou rychlostí,
+- šest jezdců — žralok, krokodýl, jelen, nosorožec, zajíček a delfín (bez jmen, poznáš je podle tváře), každý s jinou rychlostí,
   zrychlením a ovládáním
 - tři tratě na tři kola proti pěti soupeřům: Slunečný okruh, Zasněžené údolí s kluzkým ledem
   a sněžením a Pouštní kaňon s písečnými závějemi, které brzdí

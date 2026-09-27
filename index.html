@@ -127,16 +127,14 @@
 </section>
 
 <div class="touch" id="touch" hidden>
-  <button class="tbtn tbtn--drift race-only" data-t="drift">Drift</button>
-  <!-- bottom centre: a wide fire button sitting on top of the two steering arrows; it shows what it will
-       shoot: the item from a box (then it glows red) or a hedgehog -->
+  <!-- bottom left: a big round fire button showing what it will shoot: the item from a box (then it glows
+       red) or a hedgehog with the number left; bottom centre: the two steering arrows; bottom right: drift -->
+  <button class="tbtn tbtn--fire" data-t="fire" aria-label="Střílet"><span class="fire-icon" id="fireIcon"></span><b class="fire-count" id="fireCount">0</b></button>
   <div class="pad">
-    <button class="tbtn tbtn--fire" data-t="fire" aria-label="Střílet"><span class="fire-icon" id="fireIcon"></span></button>
-    <div class="pad__row">
-      <button class="tbtn" data-t="left" aria-label="Doleva"><svg viewBox="0 0 30 30"><path d="M19 5 8 15l11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-      <button class="tbtn" data-t="right" aria-label="Doprava"><svg viewBox="0 0 30 30"><path d="m11 5 11 10-11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-    </div>
+    <button class="tbtn" data-t="left" aria-label="Doleva"><svg viewBox="0 0 30 30"><path d="M19 5 8 15l11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="tbtn" data-t="right" aria-label="Doprava"><svg viewBox="0 0 30 30"><path d="m11 5 11 10-11 10" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
   </div>
+  <button class="tbtn tbtn--drift race-only" data-t="drift">Drift</button>
 </div>
 
 <script type="module" src="/src/main.js"></script>

@@ -501,7 +501,7 @@ function aiInput(k, dt) {
 
 /* ================= HUD ================= */
 let hogPic = '';
-const fireBtn = $('.tbtn--fire'), fireIcon = $('#fireIcon');
+const fireBtn = $('.tbtn--fire'), fireIcon = $('#fireIcon'), fireCount = $('#fireCount');
 const el = { hogs: $('#hogs'), ammo: $('#ammo'), pos: $('#pos'), lap: $('#lap'), slot: $('#slot'), slotLabel: $('#slotLabel'), msg: $('#msg'), cd: $('#cd'), drift: $('#drift'), bolts: [1, 2].map((n) => $('#bolt' + n)) };
 const fmt = (t) => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(2).padStart(5, '0')}`; };
 let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1, lastDrift = 0;
@@ -536,7 +536,7 @@ function updateHud(dt) {
   setText('pos', el.pos, player.finished ? `${player.place}.` : `${rank}.`);
   setText('lap', el.lap, `${clamp(player.lap + 1, 1, LAPS)}/${LAPS}`);
   if (player.hogs !== lastHogs) {
-    el.hogs.textContent = String(player.hogs);
+    el.hogs.textContent = fireCount.textContent = String(player.hogs);
     el.ammo.classList.toggle('empty', player.hogs === 0);
     el.ammo.classList.toggle('full', player.hogs >= MAX_HOGS);
     if (player.hogs > lastHogs && lastHogs >= 0) { el.ammo.classList.remove('pop'); void el.ammo.offsetWidth; el.ammo.classList.add('pop'); }
@@ -631,7 +631,7 @@ CHARS.forEach((ch, i) => {
   const b = document.createElement('button');
   b.className = 'char'; b.setAttribute('role', 'radio'); b.id = 'char-' + ch.id;
   b.style.setProperty('--kart', hex(ch.kart)); b.style.setProperty('--skin', hex(ch.skin));
-  b.innerHTML = `<span class="face">${PORTRAITS[i] ? `<img src="${PORTRAITS[i]}" alt="">` : ''}</span><b>${ch.name}</b>`;
+  b.innerHTML = `<span class="face">${PORTRAITS[i] ? `<img src="${PORTRAITS[i]}" alt="">` : ''}</span>`;
   b.addEventListener('click', () => selectChar(i));
   charsEl.appendChild(b);
 });
@@ -787,7 +787,8 @@ function showResults() {
   show('#hud', false); show('#touch', false);
   const rows = karts.map((k) => ({ k, t: k.finished ? k.finishTime : raceTime + ((LAPS * N - k.prog) * SEG) / (CC[cls()].base * 0.85), est: !k.finished }));
   rows.sort((a, b) => a.t - b.t);
-  const name = (k) => `<span class="dot" style="background:${hex(k.ch.kart)}"></span>${k.ch.name}`;
+  // no names: children recognise the drivers by their faces
+  const name = (k) => { const p = PORTRAITS[CHARS.indexOf(k.ch)]; return `<span class="face face--mini" style="--kart:${hex(k.ch.kart)}">${p ? `<img src="${p}" alt="">` : ''}</span>`; };
   const place = rows.findIndex((r) => r.k.isPlayer) + 1;
   const c = CC[cls()];
   const tr = currentTrack();
@@ -1091,7 +1092,7 @@ function updateCamera(dt) {
   }
   const k = player;
   if (k.spin <= 0) camH += wrapA(k.h - camH) * (1 - Math.exp(-5 * dt));
-  const back = k.ch.camBack || 8.8, up = k.ch.camUp || 3.7;
+  const back = 8.8, up = 3.7;
   camTarget.set(k.x - Math.sin(camH) * back, k.y + up, k.z - Math.cos(camH) * back);
   camera.position.lerp(camTarget, 1 - Math.exp(-(state === 'countdown' ? 3 : 10) * dt));
   // after a hit on the player the camera shakes harder and rocks from side to side for a moment
