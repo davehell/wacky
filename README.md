@@ -27,7 +27,7 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
   se vyplatí hlavně s turbem
 - pohár: všechny tři tratě za sebou, body za umístění (10, 8, 6, 4, 2, 1) a zlatý, stříbrný
   nebo bronzový pohár na konci
-- jezdci reagují hlasem a pohybem hlavy: střelec se zaraduje, soupeř, který tě předjede, se
+- jezdci reagují pohybem hlavy: střelec se zaraduje, soupeř, který tě předjede, se
   ohlédne a zamává, a ten, koho předjedeš, se zarazí
 - zasaženému jezdci chvíli krouží kolem hlavy hvězdičky; když zasáhnou tebe, obraz se zatřese
   a zakolébá, okraje obrazovky zablikají, zacinkají hvězdičky a tablet krátce zavibruje

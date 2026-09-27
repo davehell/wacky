@@ -17,7 +17,7 @@ const DRIFT_MINI = 0.5, DRIFT_BIG = 1.2;
 const ICE_FLIGHT = 0.9;
 // how long a bubble, a magnet and a rain shower last
 const BUBBLE_T = 10, MAGNET_T = 6, RAIN_T = 4;
-// how long a reaction (a voice and a head gesture) lasts, and how often a driver may react
+// how long a reaction (a head gesture) lasts, and how often a driver may react
 const REACT_T = 1.6, REACT_GAP = 2.5, PASS_GAP = 6;
 const AI_MAX_HOGS = 3, AI_SHOT_GAP = 4.5, SAFE_AFTER_HIT = 2.2;
 const CC = [
@@ -362,13 +362,12 @@ function crash(k, s, x, z) {
 }
 
 // kind: 'hog', 'fire' or 'ice'
-// kind: 'cheer', 'bye', 'oops' or 'ouch'; heard only near the player
+// kind: 'cheer', 'bye', 'oops' or 'ouch'
 function react(k, kind) {
   if (k.reactCd > 0 || k.finished) return;
   k.react = kind; k.reactT = 0; k.reactCd = REACT_GAP;
   // which way to look back: towards the player
   k.lookSide = Math.sign((player.x - k.x) * Math.cos(k.h) - (player.z - k.z) * Math.sin(k.h)) || 1;
-  if (Math.hypot(k.x - player.x, k.z - player.z) < 35) sfx.voice(kind, k.ch.voice);
 }
 function hitKart(k, by, kind) {
   if (k.spin > 0 || k.safe > 0) return;
