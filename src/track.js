@@ -195,6 +195,27 @@ const signTex = canvasTex(256, 96, (g, w, h) => {
   g.fillText('ZKRATKA', w / 2, h / 2 + 3);
 }, false, true);
 
+// an arrow pointing up the texture, laid flat on the road with its tip towards local +z
+const arrowTex = canvasTex(128, 256, (g, w, h) => {
+  g.beginPath();
+  g.moveTo(w / 2, 8); g.lineTo(w - 8, h * 0.42); g.lineTo(w * 0.7, h * 0.42); g.lineTo(w * 0.7, h - 8);
+  g.lineTo(w * 0.3, h - 8); g.lineTo(w * 0.3, h * 0.42); g.lineTo(8, h * 0.42); g.closePath();
+  g.fillStyle = '#ffc93c'; g.fill();
+  g.lineWidth = 7; g.lineJoin = 'round'; g.strokeStyle = '#14213d'; g.stroke();
+});
+const arrowMat = new THREE.MeshStandardMaterial({ map: arrowTex, roughness: 0.6, alphaTest: 0.5 });
+const ARROW_GEO = new THREE.PlaneGeometry(6.5, 13).rotateX(-Math.PI / 2).rotateY(Math.PI);
+// the roadside board before a shortcut: a dark arrow on yellow, pointing left or right
+const boardTex = (dir) => canvasTex(256, 128, (g, w, h) => {
+  g.fillStyle = '#ffc93c'; g.fillRect(0, 0, w, h);
+  g.lineWidth = 10; g.strokeStyle = '#14213d'; g.strokeRect(5, 5, w - 10, h - 10);
+  g.save(); g.translate(w / 2, h / 2); g.scale(dir, 1);
+  g.beginPath(); g.moveTo(95, 0); g.lineTo(25, -48); g.lineTo(25, -20); g.lineTo(-95, -20); g.lineTo(-95, 20); g.lineTo(25, 20); g.lineTo(25, 48); g.closePath();
+  g.fillStyle = '#14213d'; g.fill();
+  g.restore();
+});
+const boardTexL = boardTex(-1), boardTexR = boardTex(1);
+
 function trackFrame(i, lat = 0) {
   const g = new THREE.Group();
   g.position.set(P[i].x + S[i].x * lat, 0, P[i].z + S[i].z * lat);
@@ -269,6 +290,25 @@ function buildShortcut() {
   const sm = new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.8 }), brown = std(0xa0703f);
   const board = mesh(new THREE.BoxGeometry(4.2, 1.5, 0.2), [brown, brown, brown, brown, sm, sm]); board.position.set(0, 3.2, 0.2); sign.add(board);
   add(sign);
+  // big yellow arrows painted on the road before the entrance, stepping over to the side the shortcut
+  // leaves on and pointing into it, so it is seen well in advance
+  const ex = cutPts[k0], ie = nearestFull(ex.x, ex.z).i;
+  const sd = Math.sign((ex.x - P[ie].x) * S[ie].x + (ex.z - P[ie].z) * S[ie].z) || 1;
+  for (const [back, lat, turn] of [[46, 1.5, 0.2], [34, 4.5, 0.35], [22, 7.5, 0.5], [10, 10.5, 0.65]]) {
+    const i = (ie - back + N) % N, g = trackFrame(i, sd * lat);
+    const m = mesh(ARROW_GEO, arrowMat);
+    m.position.y = 0.05; m.rotation.y = sd * turn; m.castShadow = false;
+    g.add(m);
+  }
+  // and a big yellow board at the roadside before it, facing the drivers, with an arrow pointing into it
+  {
+    const g = trackFrame((ie - 30 + N) % N, sd * (W + 4));
+    const face = new THREE.MeshStandardMaterial({ map: sd > 0 ? boardTexL : boardTexR, roughness: 0.6 }), dark = std(0x14213d);
+    const board = mesh(new THREE.BoxGeometry(6, 3, 0.25), [dark, dark, dark, dark, dark, face]);
+    board.position.y = 4.4; board.rotation.y = -sd * 0.35;
+    g.add(board);
+    for (const x of [-2, 2]) { const post = mesh(new THREE.BoxGeometry(0.3, 3.2, 0.3), dark); post.position.set(x, 1.6, 0.2); post.rotation.y = board.rotation.y; g.add(post); }
+  }
   // a jump in the middle of the shortcut
   const mk = Math.round(n * 0.5), p = cutPts[mk], t = cutPts[mk + 1].clone().sub(cutPts[mk - 1]).normalize();
   addRamp(p.x - t.x * 3.5, p.z - t.z * 3.5, t.x, t.z, CUT_W - 1);
