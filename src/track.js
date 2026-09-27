@@ -173,7 +173,7 @@ const dirtTex = canvasTex(128, 128, (g, w, h) => {
   for (let i = 0; i < 900; i++) { const v = Math.random(); g.fillStyle = v < 0.5 ? 'rgba(120,84,50,0.6)' : 'rgba(190,150,105,0.6)'; g.fillRect(Math.random() * w, Math.random() * h, 3, 3); }
   g.fillStyle = 'rgba(95,64,38,0.55)'; g.fillRect(w * 0.26, 0, 12, h); g.fillRect(w * 0.66, 0, 12, h);
 }, true);
-const dirtMat = new THREE.MeshStandardMaterial({ map: dirtTex, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+const dirtMat = new THREE.MeshStandardMaterial({ map: dirtTex, roughness: 1, side: THREE.DoubleSide });
 const checkTex = canvasTex(160, 32, (g) => { for (let x = 0; x < 20; x++) for (let y = 0; y < 4; y++) { g.fillStyle = (x + y) % 2 ? '#111' : '#fff'; g.fillRect(x * 8, y * 8, 8, 8); } });
 checkTex.magFilter = THREE.NearestFilter;
 const bannerTex = canvasTex(1024, 128, (c, w, h) => {
@@ -194,6 +194,27 @@ const signTex = canvasTex(256, 96, (g, w, h) => {
   g.fillStyle = '#fff8e6'; g.font = '44px Bungee, Impact, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillText('ZKRATKA', w / 2, h / 2 + 3);
 }, false, true);
+
+// an arrow pointing up the texture, laid flat on the road with its tip towards local +z
+const arrowTex = canvasTex(128, 256, (g, w, h) => {
+  g.beginPath();
+  g.moveTo(w / 2, 8); g.lineTo(w - 8, h * 0.42); g.lineTo(w * 0.7, h * 0.42); g.lineTo(w * 0.7, h - 8);
+  g.lineTo(w * 0.3, h - 8); g.lineTo(w * 0.3, h * 0.42); g.lineTo(8, h * 0.42); g.closePath();
+  g.fillStyle = '#ffc93c'; g.fill();
+  g.lineWidth = 7; g.lineJoin = 'round'; g.strokeStyle = '#14213d'; g.stroke();
+});
+const arrowMat = new THREE.MeshStandardMaterial({ map: arrowTex, roughness: 0.6, alphaTest: 0.5 });
+const ARROW_GEO = new THREE.PlaneGeometry(6.5, 13).rotateX(-Math.PI / 2).rotateY(Math.PI);
+// the roadside board before a shortcut: a dark arrow on yellow, pointing left or right
+const boardTex = (dir) => canvasTex(256, 128, (g, w, h) => {
+  g.fillStyle = '#ffc93c'; g.fillRect(0, 0, w, h);
+  g.lineWidth = 10; g.strokeStyle = '#14213d'; g.strokeRect(5, 5, w - 10, h - 10);
+  g.save(); g.translate(w / 2, h / 2); g.scale(dir, 1);
+  g.beginPath(); g.moveTo(95, 0); g.lineTo(25, -48); g.lineTo(25, -20); g.lineTo(-95, -20); g.lineTo(-95, 20); g.lineTo(25, 20); g.lineTo(25, 48); g.closePath();
+  g.fillStyle = '#14213d'; g.fill();
+  g.restore();
+});
+const boardTexL = boardTex(-1), boardTexR = boardTex(1);
 
 function trackFrame(i, lat = 0) {
   const g = new THREE.Group();
@@ -241,8 +262,10 @@ function buildShortcut() {
     const q = cutPts[Math.min(k + 1, n)], o = cutPts[Math.max(k - 1, 0)], t = q.clone().sub(o).normalize();
     return new THREE.Vector3(t.z, 0, -t.x);
   });
-  // just under the road, so where the two overlap at the ends the road stays on top
-  ribbonFrom(cutPts, sides, -CUT_W, CUT_W, 0.025, 14, dirtMat, false);
+  // above the ground but under the verge and the road, so where they overlap at the ends the road stays on
+  // top. Only the height decides: a polygon offset made the ground win at a flat view, and the dirt then
+  // popped up in pieces while driving along it
+  ribbonFrom(cutPts, sides, -CUT_W, CUT_W, 0.012, 14, dirtMat, false);
   // hay bales along both edges, off the road
   const bale = new THREE.CylinderGeometry(0.8, 0.8, 1.6, 12).rotateZ(Math.PI / 2), baleM = std(0xe6c35c, { roughness: 0.95 });
   for (let k = 0; k <= n; k += 2) {
@@ -267,6 +290,25 @@ function buildShortcut() {
   const sm = new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.8 }), brown = std(0xa0703f);
   const board = mesh(new THREE.BoxGeometry(4.2, 1.5, 0.2), [brown, brown, brown, brown, sm, sm]); board.position.set(0, 3.2, 0.2); sign.add(board);
   add(sign);
+  // big yellow arrows painted on the road before the entrance, stepping over to the side the shortcut
+  // leaves on and pointing into it, so it is seen well in advance
+  const ex = cutPts[k0], ie = nearestFull(ex.x, ex.z).i;
+  const sd = Math.sign((ex.x - P[ie].x) * S[ie].x + (ex.z - P[ie].z) * S[ie].z) || 1;
+  for (const [back, lat, turn] of [[46, 1.5, 0.2], [34, 4.5, 0.35], [22, 7.5, 0.5], [10, 10.5, 0.65]]) {
+    const i = (ie - back + N) % N, g = trackFrame(i, sd * lat);
+    const m = mesh(ARROW_GEO, arrowMat);
+    m.position.y = 0.05; m.rotation.y = sd * turn; m.castShadow = false;
+    g.add(m);
+  }
+  // and a big yellow board at the roadside before it, facing the drivers, with an arrow pointing into it
+  {
+    const g = trackFrame((ie - 30 + N) % N, sd * (W + 4));
+    const face = new THREE.MeshStandardMaterial({ map: sd > 0 ? boardTexL : boardTexR, roughness: 0.6 }), dark = std(0x14213d);
+    const board = mesh(new THREE.BoxGeometry(6, 3, 0.25), [dark, dark, dark, dark, dark, face]);
+    board.position.y = 4.4; board.rotation.y = -sd * 0.35;
+    g.add(board);
+    for (const x of [-2, 2]) { const post = mesh(new THREE.BoxGeometry(0.3, 3.2, 0.3), dark); post.position.set(x, 1.6, 0.2); post.rotation.y = board.rotation.y; g.add(post); }
+  }
   // a jump in the middle of the shortcut
   const mk = Math.round(n * 0.5), p = cutPts[mk], t = cutPts[mk + 1].clone().sub(cutPts[mk - 1]).normalize();
   addRamp(p.x - t.x * 3.5, p.z - t.z * 3.5, t.x, t.z, CUT_W - 1);
@@ -398,7 +440,8 @@ function buildTrack(tr) {
     for (let i = 0; i < 9000; i++) { g.fillStyle = th.ground[1][i % 5]; g.fillRect(Math.random() * w, Math.random() * h, 1 + Math.random() * 2, 2 + Math.random() * 4); }
   }, true);
   grassTex.repeat.set(160, 160);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(3200, 3200), new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.95 }));
+  // pushed back in depth, so everything lying flat on it wins at any distance and angle
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(3200, 3200), new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 }));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   add(ground);
