@@ -30,7 +30,7 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
 - jezdci reagují pohybem hlavy: střelec se zaraduje, soupeř, který tě předjede, se
   ohlédne a zamává, a ten, koho předjedeš, se zarazí
 - zasaženému jezdci chvíli krouží kolem hlavy hvězdičky; když zasáhnou tebe, obraz se zatřese
-  a zakolébá, okraje obrazovky zablikají, zacinkají hvězdičky a tablet krátce zavibruje
+  a zakolébá, zacinkají hvězdičky a tablet krátce zavibruje
 - v cíli pódium pro první tři: každé zvíře slaví po svém, padají konfety a vítěz poháru dostane
   zlatý pohár
 - v posledním kole zamává uprostřed obrazovky šachovnicová vlajka (hra se obejde bez čtení)

@@ -380,9 +380,8 @@ function hitKart(k, by, kind) {
   if (by && by !== k) react(by, 'cheer');
   if (k.isPlayer) {
     showMsg('Au!'); sfx.hit(); sfx.hitBy(kind); sfx.dizzy();
-    // the whole picture wobbles, the screen edges flash and a tablet gives a little buzz
+    // the whole picture wobbles and a tablet gives a little buzz
     camHit = 1;
-    hitFlash.classList.remove('on'); void hitFlash.offsetWidth; hitFlash.classList.add('on');
     if (navigator.vibrate) navigator.vibrate([70, 50, 90]);
   } else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); sfx.dizzy(0.5); }
 }
@@ -509,7 +508,7 @@ let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1, lastDrift = 0;
   $('#hogIcon').innerHTML = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
 }
 function showMsg(t, dur = 1.3) { el.msg.textContent = t; el.msg.classList.remove('pop'); void el.msg.offsetWidth; el.msg.classList.add('pop'); el.msg.hidden = false; msgTimer = dur; }
-const itemPop = $('#itemPop'), hitFlash = $('#hitFlash'), flag = $('#flag');
+const itemPop = $('#itemPop'), flag = $('#flag');
 let flagTimer = 0;
 // the last lap: children cannot read yet, so a waving chequered flag says it instead of words
 function waveFlag() {
