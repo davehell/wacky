@@ -45,7 +45,8 @@ Pak otevři adresu, kterou Vite vypíše (standardně http://localhost:5188).
 - syntetizovaný zvuk motoru s řazením, motory soupeřů s dopplerovým efektem
 - veselá hudba v menu a na pódiu, která se skládá přímo ve hře: hlavní motiv zůstává a prostřední
   část se při každém opakování trochu obmění; během jízdy hudba nehraje
-- ovládání klávesnicí, gamepadem i dotykem
+- ovládání klávesnicí, gamepadem i dotykem; na dotykové obrazovce ukazuje tlačítko střelby, co vystřelí:
+  věc z krabice (tlačítko je pak červené), jinak ježka
 
 ## Ovládání
 

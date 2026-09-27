@@ -500,12 +500,15 @@ function aiInput(k, dt) {
 }
 
 /* ================= HUD ================= */
+let hogPic = '';
+const fireBtn = $('.tbtn--fire'), fireIcon = $('#fireIcon');
 const el = { hogs: $('#hogs'), ammo: $('#ammo'), pos: $('#pos'), lap: $('#lap'), slot: $('#slot'), slotLabel: $('#slotLabel'), msg: $('#msg'), cd: $('#cd'), drift: $('#drift'), bolts: [1, 2].map((n) => $('#bolt' + n)) };
 const fmt = (t) => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s.toFixed(2).padStart(5, '0')}`; };
 let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1, lastDrift = 0;
 {
   const pic = hedgehogPicture();
-  $('#hogIcon').innerHTML = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
+  hogPic = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
+  $('#hogIcon').innerHTML = hogPic;
 }
 function showMsg(t, dur = 1.3) { el.msg.textContent = t; el.msg.classList.remove('pop'); void el.msg.offsetWidth; el.msg.classList.add('pop'); el.msg.hidden = false; msgTimer = dur; }
 const itemPop = $('#itemPop'), flag = $('#flag');
@@ -544,8 +547,13 @@ function updateHud(dt) {
     el.slot.innerHTML = slot ? ICONS[slot] : '';
     el.slotLabel.textContent = slot ? ITEM_NAMES[slot] : 'Prázdné';
     if (slot) { el.slot.classList.remove('pop'); void el.slot.offsetWidth; el.slot.classList.add('pop'); showItemPop(slot); }
+    // the fire button shows what it shoots: the item, or else a hedgehog
+    fireIcon.innerHTML = slot ? ICONS[slot] : hogPic;
+    fireBtn.classList.toggle('has-item', !!slot);
+    fireIcon.classList.remove('pop'); void fireIcon.offsetWidth; fireIcon.classList.add('pop');
     lastSlot = slot;
   }
+  fireBtn.classList.toggle('empty', !slot && player.hogs === 0);
   const ch = player.drifting ? player.driftCharge : 0;
   el.drift.classList.toggle('on', player.drifting);
   const fills = [ch / DRIFT_MINI, (ch - DRIFT_MINI) / (DRIFT_BIG - DRIFT_MINI)];
