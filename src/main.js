@@ -698,6 +698,12 @@ function showBest() {
   $('#best').textContent = t.charAt(0).toUpperCase() + t.slice(1);
 }
 
+// which version this is, so a parent can tell whether the tablet already has the latest one
+{
+  const [date, id] = (import.meta.env.APP_COMMIT || '').split(' ');
+  const when = date ? date.split('-').map(Number).reverse().join('. ') : '';
+  $('#version').textContent = ['Verze ' + import.meta.env.APP_VERSION, when, id].filter(Boolean).join(' · ');
+}
 function show(id, on) { $(id).hidden = !on; }
 function clearField() {
   for (const p of projectiles) scene.remove(p.mesh);

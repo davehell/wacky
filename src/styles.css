@@ -196,6 +196,7 @@ h2 { margin: 4px 0 -6px; font-size: 12px; font-weight: 800; letter-spacing: 0.12
 }
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
 .row > * { flex: 1 1 140px; }
+.version { margin: -8px 0 0; font-size: 11px; color: var(--ink-soft); opacity: 0.8; font-variant-numeric: tabular-nums; }
 .best { margin: -4px 0 0; font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 13px; color: var(--ink-soft); }
 .keys dt { font-weight: 800; color: var(--ink); white-space: nowrap; }
