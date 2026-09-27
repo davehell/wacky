@@ -4,12 +4,12 @@ import { canvasTex, std, mesh, snapshots } from './render.js';
 
 /* ================= Characters & karts ================= */
 const CHARS = [
-  { id: 'shark', name: 'Žralok Žorž', skin: 0x4f86c6, kart: 0xfb5607 },
-  { id: 'giraffe', name: 'Žirafa Žofie', skin: 0xf6c453, kart: 0x06b6a4, shirt: 0xef476f, camUp: 5.1, camBack: 10.5 },
-  { id: 'deer', name: 'Jelen Jarda', skin: 0xb0703f, kart: 0x8338ec, shirt: 0x06b6a4 },
-  { id: 'frog', name: 'Žabák Franta', skin: 0x5cbf4a, kart: 0xef476f, shirt: 0xf5f5f0 },
-  { id: 'bunny', name: 'Zajíček Bobek', skin: 0xf7f4ef, kart: 0x3a86ff, shirt: 0xffc93c },
-  { id: 'elephant', name: 'Slonice Ela', skin: 0xa7aecb, kart: 0xffc93c, shirt: 0x3a86ff },
+  { id: 'shark', skin: 0x4f86c6, kart: 0xfb5607 },
+  { id: 'crocodile', skin: 0x5aa83c, kart: 0xffc93c },
+  { id: 'deer', skin: 0xb0703f, kart: 0x8338ec, shirt: 0x06b6a4 },
+  { id: 'rhino', skin: 0x9ea3b8, kart: 0x06b6a4, shirt: 0xffc93c },
+  { id: 'bunny', skin: 0xf7f4ef, kart: 0x3a86ff, shirt: 0xffc93c },
+  { id: 'dolphin', skin: 0x7cc3e6, kart: 0xef476f },
 ];
 
 const SPH = new THREE.SphereGeometry(1, 28, 20);
@@ -43,23 +43,25 @@ function shirtTorso(g, ch) {
   part(g, SPH, std(ch.shirt, { roughness: 0.7 }), 0, 1.3, -0.45, 0.5, 0.55, 0.43);
   for (const s of [-1, 1]) part(g, SPH, std(ch.skin, { roughness: 0.7 }), s * 0.22, 1.3, 0.3, 0.13);
 }
-function spotTexture(base, spot, n) {
-  return canvasTex(256, 256, (g, w, h) => {
-    g.fillStyle = base; g.fillRect(0, 0, w, h);
-    g.fillStyle = spot;
-    for (let i = 0; i < n; i++) {
-      const cx = (((i * 97) % 11) / 11) * w + (i % 3) * 9, cy = (((i * 53) % 13) / 13) * h, r = 13 + (i % 4) * 4;
-      g.beginPath();
-      for (let k = 0; k <= 7; k++) {
-        const a = (k / 7) * Math.PI * 2, rr = r * (0.75 + ((i * 7 + k * 13) % 10) / 30);
-        const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr;
-        if (k) g.lineTo(px, py); else g.moveTo(px, py);
-      }
-      g.fill();
-    }
-  }, true);
+// a pointed spike standing out of a surface along dir (a unit vector in the parent's space)
+const CONE = new THREE.ConeGeometry(1, 1, 8);
+function spike(parent, mat, x, y, z, r, len, dir) {
+  const m = part(parent, CONE, mat, x + dir.x * len * 0.4, y + dir.y * len * 0.4, z + dir.z * len * 0.4, r, len, r);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+  return m;
 }
-let giraffeMat = null;
+const V = (x, y, z) => new THREE.Vector3(x, y, z).normalize();
+// a body with a light belly and two arms reaching for the steering wheel, for animals without a shirt
+function bareTorso(g, skin, belly) {
+  part(g, SPH, skin, 0, 1.4, -0.45, 0.55, 0.62, 0.46);
+  part(g, SPH, belly, 0, 1.35, -0.12, 0.4, 0.5, 0.26);
+  for (const s of [-1, 1]) {
+    const a = part(g, SPH, skin, s * 0.36, 1.42, -0.04, 0.13, 0.13, 0.42);
+    a.rotation.set(0.35, -s * 0.3, 0);
+    part(g, SPH, skin, s * 0.22, 1.3, 0.3, 0.14);
+  }
+}
+let sailorMat = null;
 
 const SPECIES = {
   shark(g, ch) {
@@ -83,26 +85,31 @@ const SPECIES = {
     cheeks(h, 0.4, -0.1, 0.4);
     return h;
   },
-  giraffe(g, ch) {
-    if (!giraffeMat) giraffeMat = new THREE.MeshStandardMaterial({ map: spotTexture('#f6c453', '#b8692e', 40), roughness: 0.7 });
-    const sp = giraffeMat, brown = std(0x8a4b22, { roughness: 0.7 }), muzzle = std(0xf3dfb0, { roughness: 0.7 });
-    shirtTorso(g, ch);
-    const n = group(g, 0, 1.55, -0.45);
-    n.rotation.x = 0.14;
-    part(n, new THREE.CylinderGeometry(0.19, 0.27, 1.6, 16), sp, 0, 0.8, 0);
-    part(n, new THREE.BoxGeometry(0.1, 1.45, 0.14), brown, 0, 0.85, -0.22);
-    n.userData.face = part(n, SPH, sp, 0, 1.7, 0.08, 0.36, 0.36, 0.5);
-    part(n, SPH, muzzle, 0, 1.6, 0.5, 0.27, 0.24, 0.25);
+  // green with a long toothy snout; from behind the bumps of the eyes on top of the head and two rows of
+  // spikes down the back give him away
+  crocodile(g, ch) {
+    const skin = std(ch.skin, { roughness: 0.5 }), belly = std(0xf0e6a8, { roughness: 0.6 }), dark = std(0x2f7a3a, { roughness: 0.55 });
+    bareTorso(g, skin, belly);
     for (const s of [-1, 1]) {
-      part(n, SPH, M.black, s * 0.08, 1.66, 0.72, 0.035);
-      eye(n, s * 0.24, 1.82, 0.26, 0.13, s * 0.5);
-      part(n, new THREE.CylinderGeometry(0.05, 0.06, 0.34, 8), sp, s * 0.14, 2.1, -0.06);
-      part(n, SPH, brown, s * 0.14, 2.28, -0.06, 0.085);
-      const e = part(n, SPH, sp, s * 0.38, 1.9, -0.08, 0.22, 0.08, 0.11); e.rotation.z = -s * 0.35;
+      for (let i = 0; i < 5; i++) {
+        const y = 1.0 + i * 0.2, dy = (y - 1.4) / 0.62, z = -0.45 - 0.44 * Math.sqrt(1 - dy * dy);
+        spike(g, dark, s * 0.17, y, z, 0.11 - i * 0.01, 0.4, V(s * 0.35, 0.5 + dy * 0.4, -1));
+      }
     }
-    cheeks(n, 0.27, 1.58, 0.36);
-    smile(n, 0, 1.55, 0.7, 0.1);
-    return n;
+    const h = group(g, 0, 2.05, -0.3);
+    part(h, SPH, skin, 0, 0, 0, 0.52, 0.42, 0.5);
+    part(h, SPH, skin, 0, -0.08, 0.55, 0.36, 0.2, 0.52);
+    part(h, SPH, belly, 0, -0.18, 0.5, 0.32, 0.12, 0.46);
+    for (const s of [-1, 1]) {
+      part(h, SPH, skin, s * 0.22, 0.3, 0.1, 0.2);
+      eye(h, s * 0.22, 0.36, 0.22, 0.15, s * 0.3);
+      part(h, SPH, dark, s * 0.1, 0.08, 0.98, 0.06, 0.05, 0.05);
+      for (let i = 0; i < 4; i++) spike(h, M.white, s * (0.31 - i * 0.02), -0.15, 0.4 + i * 0.16, 0.035, 0.1, V(0, -1, 0));
+      spike(h, dark, s * 0.14, 0.28, -0.36, 0.09, 0.32, V(s * 0.3, 0.7, -1));
+    }
+    smile(h, 0, -0.1, 0.98, 0.14, 0x2f5d22);
+    cheeks(h, 0.4, -0.08, 0.34);
+    return h;
   },
   deer(g, ch) {
     const skin = std(ch.skin, { roughness: 0.7 }), light = std(0xf1dcc0, { roughness: 0.7 }), ant = std(0xe9d3a4, { roughness: 0.6 });
@@ -130,29 +137,24 @@ const SPECIES = {
     for (const [x, y] of [[-0.25, 1.55], [0.2, 1.4], [0.02, 1.2], [-0.15, 1.15], [0.28, 1.2]]) part(g, SPH, M.white, x, y, -0.86, 0.06, 0.06, 0.03);
     return h;
   },
-  frog(g, ch) {
-    const skin = std(ch.skin, { roughness: 0.4 }), belly = std(0xd8f0a8, { roughness: 0.6 }), dark = std(0x3f8f35, { roughness: 0.5 });
-    const gold = std(0xffc93c, { metalness: 0.6, roughness: 0.25 });
+  // grey, with a big horn on the nose and a little one behind it; the tips of both horns and the two round
+  // ears stick up above the head, so she is easy to tell from behind
+  rhino(g, ch) {
+    const skin = std(ch.skin, { roughness: 0.75 }), horn = std(0xf1e6c8, { roughness: 0.5 });
     shirtTorso(g, ch);
-    const h = group(g, 0, 2.0, -0.3);
-    part(h, SPH, skin, 0, 0, 0, 0.8, 0.5, 0.62);
-    part(h, SPH, belly, 0, -0.15, 0.16, 0.68, 0.34, 0.47);
+    const h = group(g, 0, 2.1, -0.35);
+    part(h, SPH, skin, 0, 0, 0, 0.58, 0.52, 0.56);
+    part(h, SPH, skin, 0, -0.14, 0.42, 0.44, 0.34, 0.38);
+    spike(h, horn, 0, 0.12, 0.66, 0.15, 0.72, V(0, 1, 0.45));
+    spike(h, horn, 0, 0.4, 0.34, 0.09, 0.34, V(0, 1, 0.3));
     for (const s of [-1, 1]) {
-      part(h, SPH, skin, s * 0.4, 0.4, 0.02, 0.3);
-      eye(h, s * 0.4, 0.46, 0.2, 0.2, s * 0.2);
-      part(h, SPH, dark, s * 0.32, 0.2, -0.5, 0.15, 0.1, 0.07);
+      const e = part(h, SPH, skin, s * 0.34, 0.52, -0.14, 0.12, 0.22, 0.09); e.rotation.z = -s * 0.35;
+      const ei = part(h, SPH, M.pink, s * 0.34, 0.52, -0.08, 0.07, 0.15, 0.05); ei.rotation.z = -s * 0.35;
+      eye(h, s * 0.29, 0.14, 0.4, 0.13, s * 0.45);
+      part(h, SPH, M.black, s * 0.14, -0.12, 0.78, 0.06, 0.045, 0.04);
     }
-    part(h, SPH, dark, 0, 0.28, -0.52, 0.12, 0.09, 0.06);
-    smile(h, 0, -0.04, 0.55, 0.38, 0x2f5d22);
-    cheeks(h, 0.55, -0.08, 0.34);
-    const c = group(h, 0, 0.55, -0.12);
-    part(c, new THREE.CylinderGeometry(0.24, 0.27, 0.16, 18), gold, 0, 0, 0);
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2;
-      part(c, new THREE.ConeGeometry(0.07, 0.2, 6), gold, Math.sin(a) * 0.22, 0.17, Math.cos(a) * 0.22);
-      part(c, SPH, gold, Math.sin(a) * 0.22, 0.29, Math.cos(a) * 0.22, 0.035);
-    }
-    part(c, SPH, std(0xef476f, { roughness: 0.15 }), 0, 0.02, 0.27, 0.06);
+    smile(h, 0, -0.28, 0.72, 0.14);
+    cheeks(h, 0.4, -0.14, 0.38);
     return h;
   },
   bunny(g, ch) {
@@ -175,30 +177,43 @@ const SPECIES = {
     cheeks(h, 0.36, -0.12, 0.4);
     return h;
   },
-  elephant(g, ch) {
-    const skin = std(ch.skin, { roughness: 0.7 });
-    shirtTorso(g, ch);
-    const h = group(g, 0, 2.1, -0.35);
-    part(h, SPH, skin, 0, 0, 0, 0.6, 0.56, 0.58);
-    for (const s of [-1, 1]) {
-      const e = part(h, SPH, skin, s * 0.74, 0.02, -0.14, 0.52, 0.56, 0.08); e.rotation.y = -s * 0.35;
-      const ei = part(h, SPH, M.pink, s * 0.72, 0.02, -0.08, 0.38, 0.42, 0.05); ei.rotation.y = -s * 0.35;
-      eye(h, s * 0.24, 0.13, 0.45, 0.14, s * 0.35);
-      const t = part(h, new THREE.ConeGeometry(0.05, 0.26, 8), M.white, s * 0.2, -0.32, 0.46); t.rotation.x = 1.9;
+  // light blue with a short beak, in a striped sailor shirt; from behind a curved fin on the back and a
+  // flat tail over the rear wing
+  dolphin(g, ch) {
+    if (!sailorMat) {
+      sailorMat = new THREE.MeshStandardMaterial({ roughness: 0.7, map: canvasTex(64, 128, (c, w, hh) => {
+        c.fillStyle = '#f7f7f2'; c.fillRect(0, 0, w, hh);
+        c.fillStyle = '#1d4e89';
+        for (let y = 10; y < hh; y += 18) c.fillRect(0, y, w, 8);
+      }) });
     }
-    const trunk = new THREE.CatmullRomCurve3([[0, -0.05, 0.45], [0, -0.3, 0.7], [0, -0.55, 0.76], [0, -0.64, 0.93], [0, -0.52, 1.05]].map((p) => new THREE.Vector3(p[0], p[1], p[2])));
-    part(h, new THREE.TubeGeometry(trunk, 24, 0.11, 12), skin, 0, 0, 0);
-    part(h, SPH, skin, 0, -0.52, 1.05, 0.11);
-    for (const x of [-0.08, 0, 0.08]) { const hr = part(h, new THREE.CylinderGeometry(0.015, 0.02, 0.22, 5), std(0x5b5f75), x, 0.62, -0.02); hr.rotation.z = -x * 3; }
-    cheeks(h, 0.38, -0.1, 0.42);
+    const skin = std(ch.skin, { roughness: 0.3 }), belly = std(0xeef7fb, { roughness: 0.4 });
+    part(g, SPH, sailorMat, 0, 1.3, -0.45, 0.5, 0.55, 0.43);
+    for (const s of [-1, 1]) { const f = part(g, SPH, skin, s * 0.22, 1.3, 0.3, 0.17, 0.07, 0.2); f.rotation.z = -s * 0.3; }
+    const fin = new THREE.Shape();
+    fin.moveTo(-0.35, 0); fin.lineTo(0.3, 0); fin.quadraticCurveTo(0.05, 0.25, -0.3, 0.6); fin.quadraticCurveTo(-0.22, 0.25, -0.35, 0);
+    const fg = new THREE.ExtrudeGeometry(fin, { depth: 0.12, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 3 });
+    fg.translate(0, 0, -0.06); fg.rotateY(Math.PI / 2);
+    part(g, fg, skin, 0, 1.55, -0.72);
+    part(g, SPH, skin, 0, 1.62, -1.2, 0.11, 0.11, 0.3).rotation.x = -0.5;
+    for (const s of [-1, 1]) { const t = part(g, SPH, skin, s * 0.22, 1.8, -1.42, 0.28, 0.05, 0.13); t.rotation.y = s * 0.45; }
+    const h = group(g, 0, 2.1, -0.3);
+    part(h, SPH, skin, 0, 0, 0, 0.56, 0.54, 0.56);
+    part(h, SPH, belly, 0, -0.22, 0.25, 0.42, 0.28, 0.36);
+    part(h, SPH, skin, 0, -0.14, 0.58, 0.22, 0.15, 0.3);
+    part(h, SPH, belly, 0, -0.2, 0.62, 0.19, 0.09, 0.26);
+    for (const s of [-1, 1]) eye(h, s * 0.27, 0.1, 0.42, 0.14, s * 0.4);
+    part(h, SPH, std(0x3f6f8c), 0, 0.53, -0.08, 0.08, 0.03, 0.05);
+    smile(h, 0, -0.16, 0.8, 0.12, 0x2f5d7a);
+    cheeks(h, 0.38, -0.1, 0.4);
     return h;
   },
 };
 function makeDriver(ch) {
   const g = new THREE.Group();
   const head = SPECIES[ch.id](g, ch);
-  // the head sphere is the first part of the head, except for the giraffe, whose "head" is the whole neck
-  return { group: g, head, face: head.userData.face || head.children[0] };
+  // the head sphere is the first part of the head
+  return { group: g, head, face: head.children[0] };
 }
 
 // Menu portraits show just the face: framed on the head sphere, ears and antlers may run off the edge

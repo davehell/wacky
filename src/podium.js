@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { rnd, col } from './util.js';
+import { rnd, col, clamp } from './util.js';
 import { scene, canvasTex, std, mesh } from './render.js';
 import { P, T, S } from './track.js';
 
@@ -78,16 +78,22 @@ const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(
 const CHEER = {
   // spins round and round on the spot
   shark(v, b, t, s) { const c = t % 2.4; v.root.rotation.y = b.h + (c < 0.9 ? (c / 0.9) * Math.PI * 2 : 0); v.root.position.y = b.y + hop(t * 2.6) * 0.5 * s; },
-  // swings the long neck from side to side
-  giraffe(v, b, t, s) { v.head.rotation.z = Math.sin(t * 3.2) * 0.35 * s; v.head.rotation.y = 0; v.root.position.y = b.y + hop(t * 1.6) * 0.3 * s; },
+  // snaps the jaws and wags from side to side
+  crocodile(v, b, t, s) { v.head.rotation.x = -Math.abs(Math.sin(t * 6)) * 0.35 * s; v.body.rotation.z = Math.sin(t * 3) * 0.1 * s; v.root.position.y = b.y + hop(t * 1.5) * 0.3 * s; },
   // nods the antlers to a beat
   deer(v, b, t, s) { v.head.rotation.x = Math.sin(t * 7) * 0.25 * s; v.head.rotation.z = Math.sin(t * 3.5) * 0.15; v.root.position.y = b.y + hop(t * 1.75) * 0.4 * s; },
-  // big frog jumps
-  frog(v, b, t, s) { v.root.position.y = b.y + hop(t * 1.3) * 1.6 * s; v.head.rotation.x = -hop(t * 1.3) * 0.3; },
+  // stamps and tosses the horn up
+  rhino(v, b, t, s) { v.root.position.y = b.y + hop(t * 3) * 0.25 * s; v.body.rotation.z = Math.sin(t * 6 * Math.PI / 2) * 0.06 * s; v.head.rotation.x = -Math.max(0, Math.sin(t * 3)) * 0.4 * s; },
   // quick little bunny hops
   bunny(v, b, t, s) { v.root.position.y = b.y + hop(t * 4) * 0.45 * s; v.head.rotation.z = Math.sin(t * 8) * 0.12; },
-  // raises the trunk and rocks side to side
-  elephant(v, b, t, s) { v.head.rotation.x = -0.35 - Math.sin(t * 2.5) * 0.15 * s; v.body.rotation.z = Math.sin(t * 2.5) * 0.12 * s; v.root.position.y = b.y + hop(t * 1.25) * 0.3 * s; },
+  // leaps out and turns a backflip, as in a dolphin show
+  dolphin(v, b, t, s) {
+    const c = t % 2.6, f = clamp(c / 1.1, 0, 1);
+    v.root.position.y = b.y + Math.sin(f * Math.PI) * 3.4 * s;
+    v.body.position.y = 1.2 * Math.sin(f * Math.PI);
+    v.body.rotation.x = -f * Math.PI * 2 * (s < 1 ? 0 : 1);
+    v.head.rotation.x = Math.sin(t * 5) * 0.12;
+  },
 };
 // a jump curve: up and down once per unit of time, resting in between
 function hop(t) { const f = t % 1; return f < 0.5 ? Math.sin(f * 2 * Math.PI) : 0; }

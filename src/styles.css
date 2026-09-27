@@ -164,7 +164,6 @@ h2 { margin: 4px 0 -6px; font-size: 12px; font-weight: 800; letter-spacing: 0.12
 }
 .char:hover { background: #fff; }
 .char[aria-checked="true"] { background: #fff; border-color: var(--ink); box-shadow: 0 3px 0 var(--ink); }
-.char b { font-size: 13px; line-height: 1.15; text-align: center; }
 .face { width: 78px; height: 78px; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 50% 45%, #ffffff 0 30%, var(--kart) 75%); box-shadow: 0 3px 0 rgba(20, 33, 61, 0.25); }
 .face img { width: 100%; height: 100%; display: block; }
 .tracks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -207,7 +206,7 @@ kbd { font: 700 11px var(--body); background: #fff; border: 1px solid var(--line
 .results td:first-child { font-family: var(--display); font-size: 20px; width: 40px; }
 .results td:last-child { text-align: right; font-weight: 800; }
 .results tr.me td { background: rgba(255, 201, 60, 0.35); }
-.results .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: -1px; }
+.results .face--mini { display: inline-block; width: 40px; height: 40px; vertical-align: middle; box-shadow: none; }
 .results .est { color: var(--ink-soft); font-weight: 600; }
 .results th { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); text-align: left; padding: 0 6px 4px; }
 .results th:last-child { text-align: right; }
