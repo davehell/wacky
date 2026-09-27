@@ -379,11 +379,11 @@ function hitKart(k, by, kind) {
   if (!k.isPlayer) react(k, 'ouch');
   if (by && by !== k) react(by, 'cheer');
   if (k.isPlayer) {
-    showMsg('Au!'); sfx.hit(); sfx.hitBy(kind); sfx.dizzy();
+    showMsg('Au!'); sfx.hit(); sfx.hitBy(kind);
     // the whole picture wobbles and a tablet gives a little buzz
     camHit = 1;
     if (navigator.vibrate) navigator.vibrate([70, 50, 90]);
-  } else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); sfx.dizzy(0.5); }
+  } else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); }
 }
 
 function popBubble(k) {
