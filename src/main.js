@@ -131,6 +131,11 @@ addEventListener('keydown', (e) => {
 addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
 
+// iPad: quick repeated taps and holds on the buttons would bring up the text magnifier, the callout menu
+// or a double-tap zoom. Cancelling the touch events stops all of that; the pointer events still arrive.
+for (const ev of ['touchstart', 'touchend', 'touchmove', 'dblclick', 'contextmenu', 'gesturestart']) {
+  $('#touch').addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+}
 document.querySelectorAll('.tbtn').forEach((b) => {
   const t = b.dataset.t;
   const on = (e) => { e.preventDefault(); if (t === 'fire') firePressed = true; else touch[t] = true; b.classList.add('on'); };
