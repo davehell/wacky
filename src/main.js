@@ -698,11 +698,12 @@ function showBest() {
   $('#best').textContent = t.charAt(0).toUpperCase() + t.slice(1);
 }
 
-// which version this is, so a parent can tell whether the tablet already has the latest one
+// when the game was last changed and the commit id, so a parent can tell whether the tablet has the latest one
 {
-  const [date, id] = (import.meta.env.APP_COMMIT || '').split(' ');
-  const when = date ? date.split('-').map(Number).reverse().join('. ') : '';
-  $('#version').textContent = ['Verze ' + import.meta.env.APP_VERSION, when, id].filter(Boolean).join(' · ');
+  const [iso, id] = (import.meta.env.APP_COMMIT || '').split(' ');
+  const d = iso ? new Date(iso) : null;
+  const when = d ? `${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}` : '';
+  $('#version').textContent = [when, id].filter(Boolean).join(' · ');
 }
 function show(id, on) { $(id).hidden = !on; }
 function clearField() {
