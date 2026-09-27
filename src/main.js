@@ -883,7 +883,12 @@ function simulate(dt) {
     if (k.isPlayer && k.lap > lapBefore && k.lap === LAPS - 1) waveFlag();
     if (!k.finished && k.lap >= LAPS) {
       k.finished = true; k.finishTime = raceTime; k.place = ++finishCount;
-      if (k.isPlayer) { state = 'done'; doneT = 3.2; sfx.finish(); silenceEngine(0.4); }
+      if (k.isPlayer) {
+        state = 'done'; doneT = 3.2; sfx.finish(); silenceEngine(0.4);
+        // no words at the finish, just the place as a big number, the same way the countdown shows
+        el.cd.textContent = `${k.place}.`; el.cd.hidden = false;
+        el.cd.classList.remove('pop'); void el.cd.offsetWidth; el.cd.classList.add('pop');
+      }
     }
     if (k.kid && !k.finished) rescueKid(k, dt);
     if (k.isPlayer && !k.finished) {
