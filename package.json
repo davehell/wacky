@@ -1,7 +1,7 @@
 {
   "name": "divoka-kola",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Arkádové 3D závody motokár se zvířecími jezdci v prohlížeči.",
   "scripts": {

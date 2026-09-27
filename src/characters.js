@@ -4,12 +4,12 @@ import { canvasTex, std, mesh, snapshots } from './render.js';
 
 /* ================= Characters & karts ================= */
 const CHARS = [
-  { id: 'shark', name: 'Žralok Žorž', skin: 0x4f86c6, kart: 0xfb5607, voice: 0.8 },
-  { id: 'giraffe', name: 'Žirafa Žofie', skin: 0xf6c453, kart: 0x06b6a4, shirt: 0xef476f, camUp: 5.1, camBack: 10.5, voice: 1.1 },
-  { id: 'deer', name: 'Jelen Jarda', skin: 0xb0703f, kart: 0x8338ec, shirt: 0x06b6a4, voice: 0.95 },
-  { id: 'frog', name: 'Žabák Franta', skin: 0x5cbf4a, kart: 0xef476f, shirt: 0xf5f5f0, voice: 0.9 },
-  { id: 'bunny', name: 'Zajíček Bobek', skin: 0xf7f4ef, kart: 0x3a86ff, shirt: 0xffc93c, voice: 1.3 },
-  { id: 'elephant', name: 'Slonice Ela', skin: 0xa7aecb, kart: 0xffc93c, shirt: 0x3a86ff, voice: 0.75 },
+  { id: 'shark', name: 'Žralok Žorž', skin: 0x4f86c6, kart: 0xfb5607 },
+  { id: 'giraffe', name: 'Žirafa Žofie', skin: 0xf6c453, kart: 0x06b6a4, shirt: 0xef476f, camUp: 5.1, camBack: 10.5 },
+  { id: 'deer', name: 'Jelen Jarda', skin: 0xb0703f, kart: 0x8338ec, shirt: 0x06b6a4 },
+  { id: 'frog', name: 'Žabák Franta', skin: 0x5cbf4a, kart: 0xef476f, shirt: 0xf5f5f0 },
+  { id: 'bunny', name: 'Zajíček Bobek', skin: 0xf7f4ef, kart: 0x3a86ff, shirt: 0xffc93c },
+  { id: 'elephant', name: 'Slonice Ela', skin: 0xa7aecb, kart: 0xffc93c, shirt: 0x3a86ff },
 ];
 
 const SPH = new THREE.SphereGeometry(1, 28, 20);

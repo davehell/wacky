@@ -17,7 +17,7 @@ const DRIFT_MINI = 0.5, DRIFT_BIG = 1.2;
 const ICE_FLIGHT = 0.9;
 // how long a bubble, a magnet and a rain shower last
 const BUBBLE_T = 10, MAGNET_T = 6, RAIN_T = 4;
-// how long a reaction (a voice and a head gesture) lasts, and how often a driver may react
+// how long a reaction (a head gesture) lasts, and how often a driver may react
 const REACT_T = 1.6, REACT_GAP = 2.5, PASS_GAP = 6;
 const AI_MAX_HOGS = 3, AI_SHOT_GAP = 4.5, SAFE_AFTER_HIT = 2.2;
 const CC = [
@@ -362,13 +362,12 @@ function crash(k, s, x, z) {
 }
 
 // kind: 'hog', 'fire' or 'ice'
-// kind: 'cheer', 'bye', 'oops' or 'ouch'; heard only near the player
+// kind: 'cheer', 'bye', 'oops' or 'ouch'
 function react(k, kind) {
   if (k.reactCd > 0 || k.finished) return;
   k.react = kind; k.reactT = 0; k.reactCd = REACT_GAP;
   // which way to look back: towards the player
   k.lookSide = Math.sign((player.x - k.x) * Math.cos(k.h) - (player.z - k.z) * Math.sin(k.h)) || 1;
-  if (Math.hypot(k.x - player.x, k.z - player.z) < 35) sfx.voice(kind, k.ch.voice);
 }
 function hitKart(k, by, kind) {
   if (k.spin > 0 || k.safe > 0) return;
@@ -381,9 +380,8 @@ function hitKart(k, by, kind) {
   if (by && by !== k) react(by, 'cheer');
   if (k.isPlayer) {
     showMsg('Au!'); sfx.hit(); sfx.hitBy(kind); sfx.dizzy();
-    // the whole picture wobbles, the screen edges flash and a tablet gives a little buzz
+    // the whole picture wobbles and a tablet gives a little buzz
     camHit = 1;
-    hitFlash.classList.remove('on'); void hitFlash.offsetWidth; hitFlash.classList.add('on');
     if (navigator.vibrate) navigator.vibrate([70, 50, 90]);
   } else if (by && by.isPlayer) { showMsg('Zásah!'); sfx.score(); sfx.dizzy(0.5); }
 }
@@ -510,7 +508,7 @@ let msgTimer = 0, lastSlot = '', lastHud = {}, lastHogs = -1, lastDrift = 0;
   $('#hogIcon').innerHTML = pic ? `<img src="${pic}" alt="">` : ICONS.hedgehog;
 }
 function showMsg(t, dur = 1.3) { el.msg.textContent = t; el.msg.classList.remove('pop'); void el.msg.offsetWidth; el.msg.classList.add('pop'); el.msg.hidden = false; msgTimer = dur; }
-const itemPop = $('#itemPop'), hitFlash = $('#hitFlash'), flag = $('#flag');
+const itemPop = $('#itemPop'), flag = $('#flag');
 let flagTimer = 0;
 // the last lap: children cannot read yet, so a waving chequered flag says it instead of words
 function waveFlag() {
@@ -700,6 +698,12 @@ function showBest() {
   $('#best').textContent = t.charAt(0).toUpperCase() + t.slice(1);
 }
 
+// which version this is, so a parent can tell whether the tablet already has the latest one
+{
+  const [date, id] = (import.meta.env.APP_COMMIT || '').split(' ');
+  const when = date ? date.split('-').map(Number).reverse().join('. ') : '';
+  $('#version').textContent = ['Verze ' + import.meta.env.APP_VERSION, when, id].filter(Boolean).join(' · ');
+}
 function show(id, on) { $(id).hidden = !on; }
 function clearField() {
   for (const p of projectiles) scene.remove(p.mesh);

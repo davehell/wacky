@@ -48,6 +48,8 @@ The audience is children: characters must be cute and recognisable at a glance, 
   `outputEncoding`; upgrading is a deliberate task of its own, not a side effect.
 - Coordinates: a kart's forward vector is `(sin h, cos h)`; **increasing `h` turns left**.
   `S[i]` is the track's sideways vector (local +x of `trackFrame`).
+- The menu shows the version: `version` from `package.json` plus the date and id of the commit it was
+  built from (`APP_VERSION`, `APP_COMMIT` in `vite.config.js`). Raise the version for a bigger release.
 - Keep the game runnable by opening the dev server — no build step may be required for play.
 
 ## Before handing work back
